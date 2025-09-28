@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" 
+      fx:controller="com.watermark.controller.WebViewController"
+      prefHeight="800.0" prefWidth="1200.0">
+   
+   <!-- WebView 容器 -->
+   <WebView fx:id="webView" VBox.vgrow="ALWAYS" />
+   
+</VBox>
