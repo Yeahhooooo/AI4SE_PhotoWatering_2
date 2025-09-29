@@ -15,6 +15,7 @@ import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
+// 保持轻量依赖，暂不引入数据库服务，后续通过Maven集成完整后端
 
 /**
  * 使用Java 8内置JavaFX的简化版启动器
@@ -338,19 +339,20 @@ public class SimpleWebApp extends Application {
             }
         }
         
-        public String processImage(String imagePath, String configJson) {
+    public String processImage(String imagePath, String configJson) {
             try {
                 System.out.println("开始处理图片: " + imagePath);
                 System.out.println("配置: " + configJson);
                 
-                // 实际处理图片
-                return processImageWithWatermark(imagePath, configJson);
+        // 实际处理图片
+        return processImageWithWatermark(imagePath, configJson);
                 
             } catch (Exception e) {
                 System.err.println("图片处理失败: " + e.getMessage());
                 throw new RuntimeException("图片处理失败: " + e.getMessage());
             }
         }
+        // 简化版本暂不记录历史，后续通过完整后端服务对接
         
         private String processImageWithWatermark(String imagePath, String configJson) {
             try {
@@ -571,6 +573,7 @@ public class SimpleWebApp extends Application {
             String fontColor = "#FFFFFF";
             String imagePath = ""; // 图片水印路径
         }
+        // 模板/历史/设置 API 将在完整后端接入后开放
         // 图片水印叠加
         private BufferedImage addImageWatermark(BufferedImage originalImage, WatermarkConfig config) {
             try {
