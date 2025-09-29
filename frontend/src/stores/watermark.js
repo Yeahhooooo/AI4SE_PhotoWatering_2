@@ -21,7 +21,9 @@ export const useWatermarkStore = defineStore('watermark', () => {
     opacity: 0.8,
     rotation: 0,
     scale: 1.0,
-    outputPath: ''
+    outputPath: '',
+    watermarkWidth: 100,
+    watermarkHeight: 100
   })
 
   // 预览配置

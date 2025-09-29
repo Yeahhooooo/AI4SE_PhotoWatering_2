@@ -16,6 +16,7 @@ import javafx.stage.Stage;
 import netscape.javascript.JSObject;
 
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.io.File;
@@ -567,10 +568,24 @@ public class SimpleWebApp extends Application {
                 config.outputPath = jsonObject.getString("outputPath");
                 if (config.outputPath == null) config.outputPath = "";
 
+                // 添加缩放比例字段解析
+                config.scale = jsonObject.getFloatValue("scale");
+                if (config.scale == 0) config.scale = 1.0f;
+
+                // 添加水印图片尺寸字段解析
+                config.watermarkWidth = jsonObject.getIntValue("watermarkWidth");
+                if (config.watermarkWidth == 0) config.watermarkWidth = 100;
+
+                config.watermarkHeight = jsonObject.getIntValue("watermarkHeight");
+                if (config.watermarkHeight == 0) config.watermarkHeight = 100;
+
                 
                 System.out.println("提取字段 type: '" + config.type + "'");
                 System.out.println("提取字段 text: '" + config.text + "'");
                 System.out.println("提取字段 position: '" + config.position + "'");
+                System.out.println("提取字段 scale: '" + config.scale + "'");
+                System.out.println("提取字段 watermarkWidth: '" + config.watermarkWidth + "'");
+                System.out.println("提取字段 watermarkHeight: '" + config.watermarkHeight + "'");
                 System.out.println("提取字段 outputPath: '" + config.outputPath + "'");
                 
                 return config;
@@ -586,6 +601,9 @@ public class SimpleWebApp extends Application {
                 config.fontColor = "#FFFFFF";
                 config.imagePath = "";
                 config.outputPath = "";
+                config.scale = 1.0f; // 默认缩放比例
+                config.watermarkWidth = 100; // 默认水印宽度
+                config.watermarkHeight = 100; // 默认水印高度
                 return config;
             }
         }
@@ -642,32 +660,74 @@ public class SimpleWebApp extends Application {
                 if (watermarkImg == null) {
                     throw new RuntimeException("无法读取水印图片: " + config.imagePath);
                 }
-                int width = originalImage.getWidth();
-                int height = originalImage.getHeight();
-                BufferedImage watermarkedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                
+                // 计算缩放后的原图尺寸
+                int scaledWidth = Math.round(originalImage.getWidth() * config.scale);
+                int scaledHeight = Math.round(originalImage.getHeight() * config.scale);
+                
+                BufferedImage watermarkedImage = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D g2d = watermarkedImage.createGraphics();
-                g2d.drawImage(originalImage, 0, 0, null);
+                
+                // 设置渲染质量
+                g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // 绘制缩放后的原图
+                g2d.drawImage(originalImage, 0, 0, scaledWidth, scaledHeight, null);
+                
+                // 使用专门的水印尺寸参数
+                int wmWidth = config.watermarkWidth;
+                int wmHeight = config.watermarkHeight;
+
+                System.out.println("水印原始尺寸: " + watermarkImg.getWidth() + "x" + watermarkImg.getHeight());
+                System.out.println("水印指定尺寸: " + wmWidth + "x" + wmHeight);
+                
                 // 设置透明度
                 AlphaComposite alphaComposite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, config.opacity);
                 g2d.setComposite(alphaComposite);
-                // 计算水印图片位置
-                int wmWidth = watermarkImg.getWidth();
-                int wmHeight = watermarkImg.getHeight();
+                
+                // 计算水印图片位置（考虑偏移量）
                 int x = 0, y = 0;
                 switch (config.position.toUpperCase()) {
                     case "TOP_LEFT":
-                        x = 20; y = 20; break;
+                        x = config.offsetX; y = config.offsetY; break;
                     case "TOP_RIGHT":
-                        x = width - wmWidth - 20; y = 20; break;
+                        x = scaledWidth - wmWidth - config.offsetX; y = config.offsetY; break;
                     case "BOTTOM_LEFT":
-                        x = 20; y = height - wmHeight - 20; break;
+                        x = config.offsetX; y = scaledHeight - wmHeight - config.offsetY; break;
                     case "CENTER":
-                        x = (width - wmWidth) / 2; y = (height - wmHeight) / 2; break;
+                        x = (scaledWidth - wmWidth) / 2 + config.offsetX; y = (scaledHeight - wmHeight) / 2 + config.offsetY; break;
                     case "BOTTOM_RIGHT":
                     default:
-                        x = width - wmWidth - 20; y = height - wmHeight - 20; break;
+                        x = scaledWidth - wmWidth - config.offsetX; y = scaledHeight - wmHeight - config.offsetY; break;
                 }
-                g2d.drawImage(watermarkImg, x, y, null);
+                
+                // 应用旋转变换（如果需要）
+                if (config.rotation != 0) {
+                    // 计算旋转中心
+                    int centerX = x + wmWidth / 2;
+                    int centerY = y + wmHeight / 2;
+                    
+                    // 保存当前变换
+                    AffineTransform originalTransform = g2d.getTransform();
+                    
+                    try {
+                        // 应用旋转变换
+                        g2d.rotate(Math.toRadians(config.rotation), centerX, centerY);
+                        
+                        // 绘制缩放后的水印图片
+                        g2d.drawImage(watermarkImg, x, y, wmWidth, wmHeight, null);
+                        
+                    } finally {
+                        // 恢复变换
+                        g2d.setTransform(originalTransform);
+                    }
+                } else {
+                    // 直接绘制缩放后的水印图片
+                    g2d.drawImage(watermarkImg, x, y, wmWidth, wmHeight, null);
+                }
+                
                 g2d.dispose();
                 return watermarkedImage;
             } catch (Exception e) {

@@ -41,6 +41,12 @@
                   <img :src="toFileUrl(watermarkConfig.imagePath)" alt="水印预览" />
                 </div>
               </el-form-item>
+              <el-form-item label="水印宽度">
+                <el-input-number v-model="watermarkConfig.watermarkWidth" :min="10" :max="1000" />
+              </el-form-item>
+              <el-form-item label="水印高度">
+                <el-input-number v-model="watermarkConfig.watermarkHeight" :min="10" :max="1000" />
+              </el-form-item>
             </template>
             <el-form-item label="位置">
               <el-select v-model="watermarkConfig.position">
@@ -57,7 +63,7 @@
             <el-form-item label="旋转角度">
               <el-input-number v-model="watermarkConfig.rotation" :min="0" :max="360" />
             </el-form-item>
-            <el-form-item label="缩放比例">
+            <el-form-item label="照片缩放比例">
               <el-input-number v-model="watermarkConfig.scale" :min="0.1" :max="5" :step="0.1" />
             </el-form-item>
             <el-form-item label="输出路径">
