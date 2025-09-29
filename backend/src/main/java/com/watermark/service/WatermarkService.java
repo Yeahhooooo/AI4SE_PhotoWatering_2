@@ -1,7 +1,12 @@
 package com.watermark.service;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.watermark.model.ImageInfo;
 import com.watermark.model.WatermarkConfig;
+import com.watermark.model.TextWatermarkConfig;
+import com.watermark.model.ImageWatermarkConfig;
+import com.watermark.dto.WatermarkConfigData;
 import com.watermark.strategy.WatermarkStrategy;
 import com.watermark.strategy.WatermarkStrategyFactory;
 import com.watermark.util.PathManager;
@@ -9,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -81,7 +87,11 @@ public class WatermarkService {
      */
     public BufferedImage applyWatermark(BufferedImage originalImage, WatermarkConfig config) throws Exception {
         // 使用策略模式选择合适的水印处理器
+        logger.debug("应用水印，配置类型: {}, 配置对象类型: {}", config.getType(), config.getClass().getSimpleName());
+        
         WatermarkStrategy strategy = WatermarkStrategyFactory.getStrategy(config.getType());
+        logger.debug("选择的水印策略: {}", strategy.getClass().getSimpleName());
+        
         return strategy.applyWatermark(originalImage, config);
     }
     
@@ -184,6 +194,226 @@ public class WatermarkService {
     }
     
     /**
+     * 处理图片并应用水印 (支持JSON配置)
+     */
+    public String processImageWithWatermark(String imagePath, String configJson) throws Exception {
+        try {
+            logger.info("开始处理图片: {}", imagePath);
+            logger.debug("配置JSON: {}", configJson);
+            
+            // 解析JSON配置为WatermarkConfigData对象
+            WatermarkConfigData configData = parseWatermarkConfig(configJson);
+            
+            // 加载原始图片
+            BufferedImage originalImage = ImageIO.read(new File(imagePath));
+            if (originalImage == null) {
+                throw new RuntimeException("无法读取图片文件: " + imagePath);
+            }
+            
+            // 将DTO转换为WatermarkConfig
+            WatermarkConfig config = convertToWatermarkConfig(configData);
+            
+            // 应用水印
+            BufferedImage watermarkedImage = applyWatermark(originalImage, config);
+            
+            // 生成输出路径
+            String outputPath = generateOutputPath(imagePath, configData.outputPath);
+            
+            // 保存图片
+            saveImage(watermarkedImage, outputPath, getOutputFormat(outputPath));
+            
+            logger.info("图片处理完成: {}", outputPath);
+            return outputPath;
+            
+        } catch (Exception e) {
+            logger.error("图片处理失败: " + e.getMessage(), e);
+            throw new RuntimeException("图片处理失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 解析JSON配置为WatermarkConfigData对象
+     */
+    private WatermarkConfigData parseWatermarkConfig(String configJson) {
+        try {
+            logger.debug("开始解析JSON配置: {}", configJson);
+            
+            JSONObject jsonObject = JSON.parseObject(configJson);
+            WatermarkConfigData config = new WatermarkConfigData();
+            
+            // 解析基本字段
+            config.type = jsonObject.getString("type");
+            if (config.type == null) config.type = "TEXT";
+            
+            config.text = jsonObject.getString("text");
+            if (config.text == null) config.text = "水印";
+            
+            config.position = jsonObject.getString("position");
+            if (config.position == null) config.position = "BOTTOM_RIGHT";
+            
+            config.opacity = jsonObject.getFloatValue("opacity");
+            if (config.opacity == 0) config.opacity = 0.7f;
+            
+            config.fontSize = jsonObject.getIntValue("fontSize");
+            if (config.fontSize == 0) config.fontSize = 24;
+            
+            config.fontColor = jsonObject.getString("fontColor");
+            if (config.fontColor == null) config.fontColor = "#FFFFFF";
+            
+            config.imagePath = jsonObject.getString("imagePath");
+            if (config.imagePath == null) config.imagePath = "";
+            
+            config.outputPath = jsonObject.getString("outputPath");
+            if (config.outputPath == null) config.outputPath = "";
+            
+            // 解析高级字段
+            config.scale = jsonObject.getFloatValue("scale");
+            if (config.scale == 0) config.scale = 1.0f;
+            
+            config.watermarkWidth = jsonObject.getIntValue("watermarkWidth");
+            if (config.watermarkWidth == 0) config.watermarkWidth = 100;
+            
+            config.watermarkHeight = jsonObject.getIntValue("watermarkHeight");
+            if (config.watermarkHeight == 0) config.watermarkHeight = 100;
+            
+            config.offsetX = jsonObject.getIntValue("offsetX");
+            if (config.offsetX == 0) config.offsetX = 20;
+            
+            config.offsetY = jsonObject.getIntValue("offsetY");
+            if (config.offsetY == 0) config.offsetY = 20;
+            
+            config.rotation = jsonObject.getFloatValue("rotation");
+            
+            logger.debug("JSON解析完成: type={}, text={}, position={}, outputPath={}", 
+                config.type, config.text, config.position, config.outputPath);
+            
+            return config;
+            
+        } catch (Exception e) {
+            logger.error("JSON解析失败: " + e.getMessage(), e);
+            // 返回默认配置
+            WatermarkConfigData config = new WatermarkConfigData();
+            config.type = "TEXT";
+            config.text = "水印";
+            config.position = "BOTTOM_RIGHT";
+            config.opacity = 0.7f;
+            config.fontSize = 24;
+            config.fontColor = "#FFFFFF";
+            config.imagePath = "";
+            config.outputPath = "";
+            config.scale = 1.0f;
+            config.watermarkWidth = 100;
+            config.watermarkHeight = 100;
+            return config;
+        }
+    }
+    
+    /**
+     * 将DTO转换为WatermarkConfig对象
+     */
+    private WatermarkConfig convertToWatermarkConfig(WatermarkConfigData configData) {
+        logger.debug("转换水印配置，类型: {}", configData.type);
+        
+        if ("IMAGE".equalsIgnoreCase(configData.type)) {
+            // 图片水印配置
+            ImageWatermarkConfig config = new ImageWatermarkConfig(configData.imagePath);
+            
+            // 设置基本属性
+            config.setOpacity(configData.opacity);
+            config.setScale(configData.scale);
+            config.setOffsetX(configData.offsetX);
+            config.setOffsetY(configData.offsetY);
+            config.setRotation(configData.rotation);
+            
+            // 设置位置
+            try {
+                WatermarkConfig.Position position = WatermarkConfig.Position.valueOf(configData.position.toUpperCase());
+                config.setPosition(position);
+            } catch (Exception e) {
+                logger.warn("无效的位置配置: {}, 使用默认值", configData.position);
+                config.setPosition(WatermarkConfig.Position.BOTTOM_RIGHT);
+            }
+            
+            // 设置图片水印特有属性
+            config.setWidth(configData.watermarkWidth);
+            config.setHeight(configData.watermarkHeight);
+            config.setMaintainAspectRatio(configData.maintainAspectRatio);
+            
+            logger.debug("创建图片水印配置: imagePath={}, width={}, height={}, type={}", 
+                configData.imagePath, configData.watermarkWidth, configData.watermarkHeight, config.getType());
+            
+            return config;
+        } else {
+            // 文本水印配置
+            TextWatermarkConfig config = new TextWatermarkConfig();
+            config.setText(configData.text);
+            config.setFontSize(configData.fontSize);
+            config.setOpacity(configData.opacity);
+            config.setScale(configData.scale);
+            config.setOffsetX(configData.offsetX);
+            config.setOffsetY(configData.offsetY);
+            config.setRotation(configData.rotation);
+            
+            // 设置位置
+            try {
+                WatermarkConfig.Position position = WatermarkConfig.Position.valueOf(configData.position.toUpperCase());
+                config.setPosition(position);
+            } catch (Exception e) {
+                logger.warn("无效的位置配置: {}, 使用默认值", configData.position);
+                config.setPosition(WatermarkConfig.Position.BOTTOM_RIGHT);
+            }
+            
+            // 设置文本水印特有属性
+            config.setFontFamily(configData.fontFamily);
+            config.setBold(configData.bold);
+            config.setItalic(configData.italic);
+            
+            // 解析颜色
+            try {
+                java.awt.Color fontColor = parseColor(configData.fontColor);
+                config.setColor(fontColor);
+            } catch (Exception e) {
+                logger.warn("无效的颜色配置: {}, 使用默认值", configData.fontColor);
+                config.setColor(java.awt.Color.WHITE);
+            }
+            
+            logger.debug("创建文本水印配置: text={}, fontSize={}, fontColor={}", 
+                configData.text, configData.fontSize, configData.fontColor);
+            
+            return config;
+        }
+    }
+    
+    /**
+     * 生成输出路径
+     */
+    private String generateOutputPath(String inputPath, String userOutputPath) {
+        File inputFile = new File(inputPath);
+        String fileName = inputFile.getName();
+        String name = fileName;
+        String extension = "";
+        
+        int dotIndex = fileName.lastIndexOf(".");
+        if (dotIndex > 0) {
+            extension = fileName.substring(dotIndex);
+            name = fileName.substring(0, dotIndex);
+        }
+        
+        String watermarkedName = name + "_watermarked" + extension;
+        
+        if (userOutputPath != null && !userOutputPath.isEmpty()) {
+            // 使用用户指定的输出路径
+            String normalizedPath = userOutputPath.replace('/', File.separatorChar);
+            return new File(normalizedPath, watermarkedName).getAbsolutePath();
+        } else {
+            // 使用默认输出路径
+            String outputDir = "output";
+            new File(outputDir).mkdirs();
+            return outputDir + File.separator + watermarkedName;
+        }
+    }
+    
+    /**
      * 验证水印配置
      */
     public boolean validateConfig(WatermarkConfig config) {
@@ -206,5 +436,21 @@ public class WatermarkService {
         
         // 类型特定的验证将在具体的策略类中进行
         return true;
+    }
+    
+    /**
+     * 解析颜色字符串为Color对象
+     */
+    private java.awt.Color parseColor(String colorStr) {
+        try {
+            if (colorStr != null && colorStr.startsWith("#")) {
+                return java.awt.Color.decode(colorStr);
+            } else {
+                return java.awt.Color.WHITE; // 默认白色
+            }
+        } catch (Exception e) {
+            logger.warn("解析颜色失败: {}, 使用默认白色", colorStr);
+            return java.awt.Color.WHITE;
+        }
     }
 }

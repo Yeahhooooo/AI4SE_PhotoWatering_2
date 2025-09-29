@@ -58,6 +58,49 @@ public class JavaScriptBridge {
     // ==================== 文件操作相关 ====================
     
     /**
+     * 选择单个图片文件 (前端兼容性方法)
+     */
+    public String selectImage() {
+        try {
+            if (stage == null) {
+                logger.warn("Stage未设置，无法显示文件对话框");
+                return null;
+            }
+            
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("选择图片文件");
+            fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("所有图片", "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"),
+                new FileChooser.ExtensionFilter("JPEG文件", "*.jpg", "*.jpeg"),
+                new FileChooser.ExtensionFilter("PNG文件", "*.png"),
+                new FileChooser.ExtensionFilter("BMP文件", "*.bmp"),
+                new FileChooser.ExtensionFilter("TIFF文件", "*.tiff")
+            );
+            
+            File selectedFile = fileChooser.showOpenDialog(stage);
+            
+            if (selectedFile != null) {
+                String result = selectedFile.getAbsolutePath();
+                logger.info("选择的图片文件: {}", result);
+                return result;
+            }
+            
+            return null;
+            
+        } catch (Exception e) {
+            logger.error("选择图片文件失败", e);
+            return null;
+        }
+    }
+    
+    /**
+     * 选择输出目录 (前端兼容性方法)
+     */
+    public String selectDirectory() {
+        return selectOutputDirectory();
+    }
+    
+    /**
      * 显示文件选择对话框 - 选择图片文件
      */
     public String selectImageFiles() {
@@ -147,7 +190,98 @@ public class JavaScriptBridge {
         }
     }
     
+    /**
+     * 列出指定目录中的所有图片文件（前端兼容性方法）
+     */
+    public String listImagesInDirectory(String directoryPath) {
+        try {
+            if (directoryPath == null || directoryPath.isEmpty()) {
+                return createErrorResponse("目录路径不能为空");
+            }
+            
+            File directory = new File(directoryPath);
+            if (!directory.exists() || !directory.isDirectory()) {
+                return createErrorResponse("无效的目录路径: " + directoryPath);
+            }
+            
+            // 使用ImageService处理文件夹
+            List<ImageInfo> imageInfos = imageService.processImageFolder(directory);
+            
+            // 返回图片路径列表给前端
+            List<String> imagePaths = imageInfos.stream()
+                .map(ImageInfo::getFilePath)
+                .collect(java.util.stream.Collectors.toList());
+            
+            logger.info("在目录 {} 中找到 {} 张图片", directoryPath, imagePaths.size());
+            return objectMapper.writeValueAsString(imagePaths);
+            
+        } catch (Exception e) {
+            logger.error("列出目录图片失败: {}", directoryPath, e);
+            return createErrorResponse("列出目录图片失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 选择多个图片文件（前端兼容性方法）
+     */
+    public String selectMultipleImages() {
+        try {
+            if (stage == null) {
+                logger.warn("Stage未设置，无法显示文件对话框");
+                return null;
+            }
+            
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("选择多个图片文件");
+            fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("所有图片", "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"),
+                new FileChooser.ExtensionFilter("JPEG文件", "*.jpg", "*.jpeg"),
+                new FileChooser.ExtensionFilter("PNG文件", "*.png"),
+                new FileChooser.ExtensionFilter("BMP文件", "*.bmp"),
+                new FileChooser.ExtensionFilter("TIFF文件", "*.tiff")
+            );
+            
+            List<File> selectedFiles = fileChooser.showOpenMultipleDialog(stage);
+            
+            if (selectedFiles != null && !selectedFiles.isEmpty()) {
+                // 返回文件路径列表
+                List<String> filePaths = selectedFiles.stream()
+                    .map(File::getAbsolutePath)
+                    .collect(java.util.stream.Collectors.toList());
+                
+                logger.info("选择了 {} 个图片文件", filePaths.size());
+                return objectMapper.writeValueAsString(filePaths);
+            }
+            
+            return null;
+            
+        } catch (Exception e) {
+            logger.error("选择多个图片文件失败", e);
+            return createErrorResponse("选择文件失败: " + e.getMessage());
+        }
+    }
+    
     // ==================== 图片处理相关 ====================
+    
+    /**
+     * 处理单个图片并应用水印
+     */
+    public String processImage(String imagePath, String watermarkConfigJson) {
+        try {
+            logger.info("开始处理图片: {}", imagePath);
+            logger.debug("水印配置: {}", watermarkConfigJson);
+            
+            // 使用WatermarkService处理图片（支持JSON配置）
+            String outputPath = watermarkService.processImageWithWatermark(imagePath, watermarkConfigJson);
+            
+            logger.info("图片处理完成: {}", outputPath);
+            return outputPath;
+            
+        } catch (Exception e) {
+            logger.error("处理图片失败: " + e.getMessage(), e);
+            throw new RuntimeException("图片处理失败: " + e.getMessage());
+        }
+    }
     
     /**
      * 生成水印预览
@@ -288,6 +422,58 @@ public class JavaScriptBridge {
         }
     }
     
+    /**
+     * 获取所有模板 (前端兼容方法)
+     */
+    public String getTemplates() {
+        return getAllTemplates();
+    }
+    
+    /**
+     * 保存模板 (前端兼容方法)
+     */
+    public String saveTemplate(String templateJson) {
+        return saveWatermarkTemplate(templateJson);
+    }
+    
+    /**
+     * 获取处理历史
+     */
+    public String getProcessHistory() {
+        // 这里需要实现历史记录的获取逻辑
+        // 暂时返回空数组
+        return "[]";
+    }
+    
+    /**
+     * 获取用户设置
+     */
+    public String getUserSettings() {
+        // 这里需要实现用户设置的获取逻辑
+        // 暂时返回默认设置
+        try {
+            Map<String, Object> defaultSettings = new HashMap<>();
+            defaultSettings.put("defaultOutputDir", "");
+            defaultSettings.put("defaultImageQuality", 90);
+            defaultSettings.put("autoCleanupDays", 7);
+            defaultSettings.put("showPreviewByDefault", true);
+            defaultSettings.put("theme", "light");
+            return objectMapper.writeValueAsString(defaultSettings);
+        } catch (Exception e) {
+            logger.error("获取用户设置失败", e);
+            return "{}";
+        }
+    }
+    
+    /**
+     * 保存用户设置
+     */
+    public String saveUserSettings(String settingsJson) {
+        // 这里需要实现用户设置的保存逻辑
+        logger.info("保存用户设置: {}", settingsJson);
+        return "success";
+    }
+    
     // ==================== 系统信息相关 ====================
     
     /**
@@ -374,6 +560,79 @@ public class JavaScriptBridge {
             
         } catch (Exception e) {
             logger.error("调用JavaScript函数失败: {}", functionName, e);
+        }
+    }
+    
+    /**
+     * 批量处理图片列表（前端兼容性方法）
+     * @param imagePathsJson 图片路径列表的JSON字符串
+     * @param watermarkConfigJson 水印配置的JSON字符串
+     * @param outputDirectory 输出目录路径
+     * @return 处理结果的JSON字符串
+     */
+    public String batchProcessImageList(String imagePathsJson, String watermarkConfigJson, String outputDirectory) {
+        try {
+            logger.info("开始批量处理图片列表");
+            logger.debug("图片路径JSON: {}", imagePathsJson);
+            logger.debug("水印配置JSON: {}", watermarkConfigJson);
+            logger.debug("输出目录: {}", outputDirectory);
+            
+            // 解析图片路径列表
+            @SuppressWarnings("unchecked")
+            List<String> imagePaths = objectMapper.readValue(imagePathsJson, List.class);
+            logger.info("需要处理的图片数量: {}", imagePaths.size());
+            
+            // 验证输出目录
+            if (outputDirectory == null || outputDirectory.trim().isEmpty()) {
+                return createErrorResponse("输出目录不能为空");
+            }
+            
+            // 解析水印配置并添加输出目录
+            @SuppressWarnings("unchecked")
+            Map<String, Object> configMap = objectMapper.readValue(watermarkConfigJson, Map.class);
+            configMap.put("outputPath", outputDirectory);
+            String updatedConfigJson = objectMapper.writeValueAsString(configMap);
+            
+            logger.debug("更新后的配置JSON: {}", updatedConfigJson);
+            
+            int successCount = 0;
+            int failureCount = 0;
+            
+            // 逐个处理图片
+            for (String imagePath : imagePaths) {
+                try {
+                    logger.debug("处理图片: {}", imagePath);
+                    String result = watermarkService.processImageWithWatermark(imagePath, updatedConfigJson);
+                    
+                    if (result != null && !result.isEmpty()) {
+                        successCount++;
+                        logger.debug("图片处理成功: {} -> {}", imagePath, result);
+                    } else {
+                        failureCount++;
+                        logger.warn("图片处理失败: {}", imagePath);
+                    }
+                    
+                } catch (Exception e) {
+                    failureCount++;
+                    logger.error("处理图片失败: {}", imagePath, e);
+                }
+            }
+            
+            // 构建返回结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("total", imagePaths.size());
+            result.put("successCount", successCount);
+            result.put("failureCount", failureCount);
+            result.put("message", String.format("批量处理完成：成功 %d 张，失败 %d 张", successCount, failureCount));
+            
+            String resultJson = objectMapper.writeValueAsString(result);
+            logger.info("批量处理完成: {}", resultJson);
+            return resultJson;
+            
+        } catch (Exception e) {
+            logger.error("批量处理图片列表失败", e);
+            return createErrorResponse("批量处理失败: " + e.getMessage());
         }
     }
 }

@@ -112,7 +112,6 @@ public class WatermarkApplication extends Application {
         
         // 设置系统属性
         System.setProperty("prism.lcdtext", "false");
-        System.setProperty("javafx.preloader", "com.watermark.preloader.AppPreloader");
         
         // 启动JavaFX应用
         launch(args);
