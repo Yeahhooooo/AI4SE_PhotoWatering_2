@@ -5,16 +5,7 @@
       <el-row :gutter="20">
         <el-col :span="12">
           <!-- 图片选择与预览 -->
-          <el-upload
-            class="image-uploader"
-            action=""
-            :show-file-list="false"
-            :before-upload="beforeImageUpload"
-            :on-change="handleImageChange"
-            :auto-upload="false"
-          >
-            <el-button type="primary">选择图片</el-button>
-          </el-upload>
+          <el-button type="primary" @click="selectBaseImage">选择图片</el-button>
           <div v-if="imagePreviewUrl" class="image-preview">
             <img :src="imagePreviewUrl" alt="预览" />
           </div>
@@ -41,18 +32,9 @@
             </template>
             <template v-else>
               <el-form-item label="水印图片">
-                <el-upload
-                  class="watermark-image-uploader"
-                  action=""
-                  :show-file-list="false"
-                  :before-upload="beforeWatermarkUpload"
-                  :on-change="handleWatermarkChange"
-                  :auto-upload="false"
-                >
-                  <el-button type="primary">选择水印图片</el-button>
-                </el-upload>
+                <el-button @click="selectWatermarkImage">选择水印图片</el-button>
                 <div v-if="watermarkConfig.imagePath" class="image-preview">
-                  <img :src="watermarkConfig.imagePath" alt="水印预览" />
+                  <img :src="toFileUrl(watermarkConfig.imagePath)" alt="水印预览" />
                 </div>
               </el-form-item>
             </template>
@@ -96,40 +78,48 @@ const appStore = useAppStore()
 const watermarkConfig = watermarkStore.watermarkConfig
 const imagePreviewUrl = watermarkStore.imagePreviewUrl
 
-const beforeImageUpload = (file) => {
-  const isImage = file.type.startsWith('image/')
-  if (!isImage) ElMessage.error('只能上传图片文件')
-  return isImage
+// JavaFX文件选择：原图
+const selectBaseImage = async () => {
+  if (window.javaApi?.selectImage) {
+    const path = await window.javaApi.selectImage()
+    if (path) {
+      watermarkStore.setCurrentImage({ path })
+    }
+  } else {
+    ElMessage.warning('非JavaFX环境，使用浏览器文件选择')
+  }
 }
-const handleImageChange = (file) => {
-  const url = URL.createObjectURL(file.raw)
-  watermarkStore.setCurrentImage({ path: url })
+// JavaFX文件选择：水印图片
+const selectWatermarkImage = async () => {
+  if (window.javaApi?.selectImage) {
+    const path = await window.javaApi.selectImage()
+    if (path) {
+      watermarkConfig.imagePath = path
+    }
+  }
 }
 
-// 新增：水印图片本地选择
-const beforeWatermarkUpload = (file) => {
-  const isImage = file.type.startsWith('image/')
-  if (!isImage) ElMessage.error('只能上传图片文件')
-  return isImage
-}
-const handleWatermarkChange = (file) => {
-  const url = URL.createObjectURL(file.raw)
-  watermarkConfig.imagePath = url
+const toFileUrl = (p) => {
+  if (!p) return ''
+  if (p.startsWith('file://')) return p
+  const norm = p.replace(/\\/g, '/').replace(/^([A-Za-z]):\//, '/$1:/')
+  return `file:///${norm.replace(/^\/+/, '')}`
 }
 
 const handleProcess = async () => {
   appStore.setProcessing(true)
-  // 处理图片时自动传递 imagePath 字段
+  // 处理图片时传递真实文件路径（去掉 file:/// 前缀）
   if (window.javaApi && imagePreviewUrl) {
     try {
-      // 兼容 TEXT/IMAGE 类型参数
       const config = { ...watermarkConfig }
       if (config.type === 'IMAGE' && !config.imagePath) {
         ElMessage.error('请先选择水印图片')
         appStore.setProcessing(false)
         return
       }
-      await window.javaApi.processImage(imagePreviewUrl, config)
+      const toFsPath = (url) => url.replace(/^file:\/\//, '').replace(/^\//, '').replace(/\//g, '\\')
+      const basePath = toFsPath(imagePreviewUrl)
+      await window.javaApi.processImage(basePath, config)
       ElMessage.success('图片处理完成！')
     } catch (e) {
       ElMessage.error('处理失败：' + e.message)
