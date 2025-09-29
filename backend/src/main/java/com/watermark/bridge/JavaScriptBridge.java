@@ -14,7 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -293,14 +295,14 @@ public class JavaScriptBridge {
      */
     public String getSystemInfo() {
         try {
-            return objectMapper.writeValueAsString(java.util.Map.of(
-                "version", "1.0.0",
-                "javaVersion", System.getProperty("java.version"),
-                "osName", System.getProperty("os.name"),
-                "osVersion", System.getProperty("os.version"),
-                "userHome", System.getProperty("user.home"),
-                "appDataDir", com.watermark.util.PathManager.getAppDataDir()
-            ));
+            Map<String, Object> systemInfo = new HashMap<>();
+            systemInfo.put("version", "1.0.0");
+            systemInfo.put("javaVersion", System.getProperty("java.version"));
+            systemInfo.put("osName", System.getProperty("os.name"));
+            systemInfo.put("osVersion", System.getProperty("os.version"));
+            systemInfo.put("userHome", System.getProperty("user.home"));
+            systemInfo.put("appDataDir", com.watermark.util.PathManager.getAppDataDir());
+            return objectMapper.writeValueAsString(systemInfo);
         } catch (Exception e) {
             logger.error("获取系统信息失败", e);
             return createErrorResponse("获取系统信息失败: " + e.getMessage());
@@ -337,10 +339,10 @@ public class JavaScriptBridge {
      */
     private String createErrorResponse(String message) {
         try {
-            return objectMapper.writeValueAsString(java.util.Map.of(
-                "error", true,
-                "message", message
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", message);
+            return objectMapper.writeValueAsString(errorResponse);
         } catch (Exception e) {
             return "{\"error\":true,\"message\":\"" + message + "\"}";
         }

@@ -1,5 +1,9 @@
 package com.watermark;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.watermark.model.*;
+import com.watermark.dto.WatermarkConfigData;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.concurrent.Worker;
@@ -7,6 +11,7 @@ import javafx.scene.Scene;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import netscape.javascript.JSObject;
 
@@ -191,7 +196,7 @@ public class SimpleWebApp extends Application {
                 "      return new Promise((resolve, reject) => {" +
                 "        setTimeout(() => {" +
                 "          try {" +
-                "            var result = window.javaApp.processImage(path, JSON.stringify(config));" +
+                "            var result = window.javaApp.processImage(path, config);" +
                 "            resolve({success: true, outputPath: result});" +
                 "          } catch (error) {" +
                 "            reject(error);" +
@@ -217,6 +222,23 @@ public class SimpleWebApp extends Application {
                 "      });" +
                 "    } catch (error) {" +
                 "      return Promise.resolve('mock_image.jpg');" +
+                "    }" +
+                "  }," +
+                "  selectDirectory: function() { " +
+                "    console.log('选择输出文件夹'); " +
+                "    try {" +
+                "      return new Promise((resolve, reject) => {" +
+                "        setTimeout(() => {" +
+                "          var path = window.javaApp.selectDirectory();" +
+                "          if (path && path !== 'null') {" +
+                "            resolve(path);" +
+                "          } else {" +
+                "            resolve(null);" +
+                "          }" +
+                "        }, 100);" +
+                "      });" +
+                "    } catch (error) {" +
+                "      return Promise.resolve(null);" +
                 "    }" +
                 "  }," +
                 "  getTemplates: function() { " +
@@ -339,6 +361,22 @@ public class SimpleWebApp extends Application {
             }
         }
         
+        public String selectDirectory() {
+            try {
+                DirectoryChooser directoryChooser = new DirectoryChooser();
+                directoryChooser.setTitle("选择输出文件夹");
+                
+                File selectedDirectory = directoryChooser.showDialog(stage);
+                String result = selectedDirectory != null ? selectedDirectory.getAbsolutePath() : null;
+                System.out.println("选择的输出文件夹: " + result);
+                return result;
+                
+            } catch (Exception e) {
+                System.err.println("选择文件夹失败: " + e.getMessage());
+                return null;
+            }
+        }
+        
     public String processImage(String imagePath, String configJson) {
             try {
                 System.out.println("开始处理图片: " + imagePath);
@@ -357,7 +395,7 @@ public class SimpleWebApp extends Application {
         private String processImageWithWatermark(String imagePath, String configJson) {
             try {
                 // 解析配置
-                WatermarkConfig config = parseWatermarkConfig(configJson);
+                WatermarkConfigData config = parseWatermarkConfig(configJson);
                 BufferedImage originalImage = ImageIO.read(new File(imagePath));
                 if (originalImage == null) {
                     throw new RuntimeException("无法读取图片文件: " + imagePath);
@@ -368,7 +406,36 @@ public class SimpleWebApp extends Application {
                 } else {
                     watermarkedImage = addTextWatermark(originalImage, config);
                 }
-                String outputPath = generateOutputPath(imagePath);
+                
+                // 根据配置生成输出路径
+                String outputPath;
+                System.out.println("检查outputPath配置 - config.outputPath: '" + config.outputPath + "'");
+                System.out.println("outputPath是否为空: " + (config.outputPath == null || config.outputPath.isEmpty()));
+                
+                if (config.outputPath != null && !config.outputPath.isEmpty()) {
+                    // 使用用户指定的输出路径
+                    // 将前端传来的正斜杠路径转换为系统适配的路径
+                    String normalizedPath = config.outputPath.replace('/', File.separatorChar);
+                    System.out.println("使用用户指定的输出路径: " + normalizedPath);
+                    File inputFile = new File(imagePath);
+                    String fileName = inputFile.getName();
+                    String name = fileName;
+                    String extension = "";
+                    int dotIndex = fileName.lastIndexOf(".");
+                    if (dotIndex > 0) {
+                        extension = fileName.substring(dotIndex);
+                        name = fileName.substring(0, dotIndex);
+                    }
+                    String watermarkedName = name + "_watermarked" + extension;
+                    outputPath = new File(normalizedPath, watermarkedName).getAbsolutePath();
+                    System.out.println("生成的完整输出路径: " + outputPath);
+                } else {
+                    // 使用默认输出路径
+                    System.out.println("使用默认输出路径");
+                    outputPath = generateOutputPath(imagePath);
+                    System.out.println("默认输出路径: " + outputPath);
+                }
+                
                 File outputFile = new File(outputPath);
                 outputFile.getParentFile().mkdirs();
                 String formatName = getImageFormat(imagePath);
@@ -399,7 +466,7 @@ public class SimpleWebApp extends Application {
             }
         }
         
-        private BufferedImage addTextWatermark(BufferedImage originalImage, WatermarkConfig config) {
+        private BufferedImage addTextWatermark(BufferedImage originalImage, WatermarkConfigData config) {
             // 创建一个新的图片副本
             BufferedImage watermarkedImage = new BufferedImage(
                 originalImage.getWidth(), 
@@ -467,55 +534,59 @@ public class SimpleWebApp extends Application {
             }
         }
         
-        private WatermarkConfig parseWatermarkConfig(String configJson) {
-            WatermarkConfig config = new WatermarkConfig();
-            // 简单的JSON解析
-            config.type = extractJsonString(configJson, "type", "TEXT");
-            config.text = extractJsonString(configJson, "text", "水印");
-            config.position = extractJsonString(configJson, "position", "BOTTOM_RIGHT");
-            config.opacity = extractJsonFloat(configJson, "opacity", 0.7f);
-            config.fontSize = extractJsonInt(configJson, "fontSize", 24);
-            config.fontColor = extractJsonString(configJson, "fontColor", "#FFFFFF");
-            config.imagePath = extractJsonString(configJson, "imagePath", "");
-            return config;
-        }
-        
-        private String extractJsonString(String json, String key, String defaultValue) {
-            String pattern = "\"" + key + "\":\"";
-            int start = json.indexOf(pattern);
-            if (start == -1) return defaultValue;
-            start += pattern.length();
-            int end = json.indexOf("\"", start);
-            return end > start ? json.substring(start, end) : defaultValue;
-        }
-        
-        private float extractJsonFloat(String json, String key, float defaultValue) {
-            String pattern = "\"" + key + "\":";
-            int start = json.indexOf(pattern);
-            if (start == -1) return defaultValue;
-            start += pattern.length();
-            int end = json.indexOf(",", start);
-            if (end == -1) end = json.indexOf("}", start);
+        private WatermarkConfigData parseWatermarkConfig(String configJson) {
+            WatermarkConfigData config = new WatermarkConfigData();
+            System.out.println("开始解析JSON配置: " + configJson);
+            
             try {
-                String value = json.substring(start, end).trim();
-                return Float.parseFloat(value);
-            } catch (NumberFormatException e) {
-                return defaultValue;
-            }
-        }
-        
-        private int extractJsonInt(String json, String key, int defaultValue) {
-            String pattern = "\"" + key + "\":";
-            int start = json.indexOf(pattern);
-            if (start == -1) return defaultValue;
-            start += pattern.length();
-            int end = json.indexOf(",", start);
-            if (end == -1) end = json.indexOf("}", start);
-            try {
-                String value = json.substring(start, end).trim();
-                return Integer.parseInt(value);
-            } catch (NumberFormatException e) {
-                return defaultValue;
+                JSONObject jsonObject = JSON.parseObject(configJson);
+                
+                System.out.println("解析JSON对象:" + jsonObject.toString());
+
+                config.type = jsonObject.getString("type");
+                if (config.type == null) config.type = "TEXT";
+
+                config.text = jsonObject.getString("text");
+                if (config.text == null) config.text = "水印";
+
+                config.position = jsonObject.getString("position");
+                if (config.position == null) config.position = "BOTTOM_RIGHT";
+
+                config.opacity = jsonObject.getFloatValue("opacity");
+                if (config.opacity == 0) config.opacity = 0.7f;
+
+                config.fontSize = jsonObject.getIntValue("fontSize");
+                if (config.fontSize == 0) config.fontSize = 24;
+
+                config.fontColor = jsonObject.getString("fontColor");
+                if (config.fontColor == null) config.fontColor = "#FFFFFF";
+
+                config.imagePath = jsonObject.getString("imagePath");
+                if (config.imagePath == null) config.imagePath = "";
+
+                config.outputPath = jsonObject.getString("outputPath");
+                if (config.outputPath == null) config.outputPath = "";
+
+                
+                System.out.println("提取字段 type: '" + config.type + "'");
+                System.out.println("提取字段 text: '" + config.text + "'");
+                System.out.println("提取字段 position: '" + config.position + "'");
+                System.out.println("提取字段 outputPath: '" + config.outputPath + "'");
+                
+                return config;
+            } catch (Exception e) {
+                System.err.println("JSON解析失败: " + e.getMessage());
+                e.printStackTrace();
+                // 返回默认配置
+                config.type = "TEXT";
+                config.text = "水印";
+                config.position = "BOTTOM_RIGHT";
+                config.opacity = 0.7f;
+                config.fontSize = 24;
+                config.fontColor = "#FFFFFF";
+                config.imagePath = "";
+                config.outputPath = "";
+                return config;
             }
         }
         
@@ -563,19 +634,9 @@ public class SimpleWebApp extends Application {
             }
         }
         
-        // 简化的配置类
-        private static class WatermarkConfig {
-            String type = "TEXT"; // TEXT 或 IMAGE
-            String text = "水印";
-            String position = "BOTTOM_RIGHT";
-            float opacity = 0.7f;
-            int fontSize = 24;
-            String fontColor = "#FFFFFF";
-            String imagePath = ""; // 图片水印路径
-        }
         // 模板/历史/设置 API 将在完整后端接入后开放
         // 图片水印叠加
-        private BufferedImage addImageWatermark(BufferedImage originalImage, WatermarkConfig config) {
+        private BufferedImage addImageWatermark(BufferedImage originalImage, WatermarkConfigData config) {
             try {
                 BufferedImage watermarkImg = ImageIO.read(new File(config.imagePath));
                 if (watermarkImg == null) {

@@ -5,9 +5,13 @@
       <el-row :gutter="20">
         <el-col :span="12">
           <!-- 图片选择与预览 -->
-          <el-button type="primary" @click="selectBaseImage">选择图片</el-button>
-          <div v-if="imagePreviewUrl" class="image-preview">
-            <img :src="imagePreviewUrl" alt="预览" />
+          <div style="margin-bottom: 10px;">
+            <el-button type="primary" @click="selectBaseImage">选择图片</el-button>
+            <el-button type="warning" @click="clearAll" style="margin-left: 10px;">清除所有</el-button>
+          </div>
+          <div v-if="watermarkStore.imagePreviewUrl" class="image-preview" :key="watermarkStore.imagePreviewUrl">
+            <img :src="watermarkStore.imagePreviewUrl" alt="预览" @load="onImageLoad" @error="onImageError" />
+            <p>{{ watermarkStore.currentImage?.path || '未选择图片' }}</p>
           </div>
         </el-col>
         <el-col :span="12">
@@ -56,6 +60,13 @@
             <el-form-item label="缩放比例">
               <el-input-number v-model="watermarkConfig.scale" :min="0.1" :max="5" :step="0.1" />
             </el-form-item>
+            <el-form-item label="输出路径">
+              <el-input v-model="outputPath" placeholder="选择输出文件夹" readonly>
+                <template #append>
+                  <el-button @click="selectOutputPath">选择文件夹</el-button>
+                </template>
+              </el-input>
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="handleProcess">处理图片</el-button>
               <el-button @click="resetConfig">重置配置</el-button>
@@ -68,34 +79,163 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useWatermarkStore } from '../stores/watermark'
 import { useAppStore } from '../stores/app'
 
 const watermarkStore = useWatermarkStore()
 const appStore = useAppStore()
 
+// 使用computed或直接使用store，不要解构
 const watermarkConfig = watermarkStore.watermarkConfig
-const imagePreviewUrl = watermarkStore.imagePreviewUrl
+const outputPath = ref('')
+
+// 安全地获取响应式属性
+const getImagePreviewUrl = () => {
+  return watermarkStore.imagePreviewUrl || ''
+}
+
+const getCurrentImage = () => {
+  return watermarkStore.currentImage || null
+}
+
+// 组件挂载时初始化store并恢复状态
+onMounted(() => {
+  console.log('WatermarkEditor 组件挂载')
+  
+  // 初始化store
+  watermarkStore.initStore()
+  
+  // 输出当前状态
+  console.log('恢复后的当前图片:', watermarkStore.currentImage)
+  console.log('恢复后的预览URL:', watermarkStore.imagePreviewUrl)
+  
+  // 监听图片状态变化
+  watch(() => watermarkStore.currentImage, (newVal, oldVal) => {
+    console.log('当前图片状态变化:', oldVal, '->', newVal)
+  }, { deep: true })
+  
+  watch(() => watermarkStore.imagePreviewUrl, (newVal, oldVal) => {
+    console.log('图片预览URL变化:', oldVal, '->', newVal)
+  })
+})
+
+// 选择输出路径
+const selectOutputPath = async () => {
+  try {
+    console.log('选择输出路径...')
+    if (window.javaApi?.selectDirectory) {
+      const path = await window.javaApi.selectDirectory()
+      if (path) {
+        outputPath.value = path
+        ElMessage.success(`已选择输出路径：${path}`)
+        console.log('输出路径设置为:', path)
+      } else {
+        console.log('未选择输出路径')
+      }
+    } else {
+      ElMessage.warning('目录选择功能未就绪')
+      console.error('window.javaApi.selectDirectory 方法不可用')
+    }
+  } catch (error) {
+    console.error('选择输出路径错误:', error)
+    ElMessage.error('选择输出路径失败')
+  }
+}
+
+// 图片加载成功回调
+const onImageLoad = () => {
+  console.log('图片加载成功:', watermarkStore.imagePreviewUrl)
+}
+
+// 图片加载失败回调
+const onImageError = (event) => {
+  console.error('图片加载失败:', event, watermarkStore.imagePreviewUrl)
+  ElMessage.warning('图片预览加载失败')
+}
 
 // JavaFX文件选择：原图
 const selectBaseImage = async () => {
-  if (window.javaApi?.selectImage) {
-    const path = await window.javaApi.selectImage()
-    if (path) {
-      watermarkStore.setCurrentImage({ path })
+  try {
+    console.log('开始选择图片...')
+    console.log('window.javaApi:', window.javaApi)
+    
+    if (!window.javaApi) {
+      ElMessage.error('JavaFX API 未就绪')
+      return
     }
-  } else {
-    ElMessage.warning('非JavaFX环境，使用浏览器文件选择')
+    
+    if (typeof window.javaApi.selectImage !== 'function') {
+      ElMessage.error('selectImage 方法不可用')
+      return
+    }
+    
+    console.log('调用 JavaFX 文件选择对话框')
+    const path = await window.javaApi.selectImage()
+    console.log('API返回的原始路径:', path, typeof path)
+    
+    // 更严格的路径验证
+    if (path && path !== 'null' && path !== 'undefined' && typeof path === 'string' && path.trim().length > 0) {
+      const trimmedPath = path.trim()
+      console.log('处理后的路径:', trimmedPath)
+      
+      // 创建图片信息对象
+      const imageInfo = { path: trimmedPath }
+      console.log('创建的imageInfo:', imageInfo)
+      
+      // 调用store方法设置图片
+      watermarkStore.setCurrentImage(imageInfo)
+      
+      // 使用nextTick确保响应式更新在DOM更新后执行
+      await nextTick()
+      
+      // 等待store中的异步URL设置完成
+      setTimeout(async () => {
+        // 验证状态是否正确设置
+        console.log('设置后的currentImage:', watermarkStore.currentImage)
+        console.log('设置后的imagePreviewUrl:', watermarkStore.imagePreviewUrl)
+        
+        if (watermarkStore.currentImage && watermarkStore.imagePreviewUrl) {
+          ElMessage.success('图片选择成功')
+          
+          // 强制触发Vue重新渲染
+          await nextTick()
+          
+          console.log('Vue响应式更新完成')
+        } else {
+          console.error('图片状态设置失败')
+          ElMessage.error('图片状态设置失败')
+        }
+      }, 50)
+    } else {
+      console.log('无效的文件路径:', path)
+      ElMessage.info('未选择图片或路径无效')
+    }
+  } catch (error) {
+    console.error('选择图片失败:', error)
+    ElMessage.error('选择图片失败: ' + (error.message || error))
   }
 }
 // JavaFX文件选择：水印图片
 const selectWatermarkImage = async () => {
-  if (window.javaApi?.selectImage) {
-    const path = await window.javaApi.selectImage()
-    if (path) {
-      watermarkConfig.imagePath = path
+  try {
+    if (window.javaApi?.selectImage) {
+      console.log('调用 JavaFX 文件选择对话框（水印图片）')
+      const path = await window.javaApi.selectImage()
+      console.log('选择的水印图片路径:', path)
+      if (path) {
+        watermarkConfig.imagePath = path
+        ElMessage.success('水印图片选择成功')
+      } else {
+        ElMessage.info('未选择水印图片')
+      }
+    } else {
+      ElMessage.warning('JavaFX API 未就绪，请稍后重试')
     }
+  } catch (error) {
+    console.error('选择水印图片失败:', error)
+    ElMessage.error('选择水印图片失败: ' + error.message)
   }
 }
 
@@ -107,30 +247,136 @@ const toFileUrl = (p) => {
 }
 
 const handleProcess = async () => {
-  appStore.setProcessing(true)
-  // 处理图片时传递真实文件路径（去掉 file:/// 前缀）
-  if (window.javaApi && imagePreviewUrl) {
+  console.log('=== 开始处理图片 ===')
+  console.log('watermarkStore.currentImage:', watermarkStore.currentImage)
+  console.log('watermarkStore.imagePreviewUrl:', watermarkStore.imagePreviewUrl)
+  console.log('outputPath.value:', outputPath.value)
+  console.log('window.javaApi:', window.javaApi)
+  
+  // localStorage检查
+  try {
+    const savedImage = localStorage.getItem('currentImage')
+    const savedUrl = localStorage.getItem('imagePreviewUrl')
+    console.log('localStorage中的currentImage:', savedImage)
+    console.log('localStorage中的imagePreviewUrl:', savedUrl)
+  } catch (e) {
+    console.warn('无法读取localStorage:', e)
+  }
+  
+  // 验证前置条件
+  if (!window.javaApi) {
+    ElMessage.error('JavaFX API 未就绪，请刷新页面重试')
+    return
+  }
+  
+  // 检查图片状态 - 安全地从 store 获取图片信息
+  let imageInfo = watermarkStore.currentImage
+  
+  // 如果 store 中没有图片信息，尝试从 localStorage 恢复
+  if (!imageInfo || !imageInfo.path) {
     try {
-      const config = { ...watermarkConfig }
-      if (config.type === 'IMAGE' && !config.imagePath) {
-        ElMessage.error('请先选择水印图片')
-        appStore.setProcessing(false)
-        return
+      const savedImage = localStorage.getItem('currentImage')
+      if (savedImage) {
+        imageInfo = JSON.parse(savedImage)
+        console.log('从 localStorage 恢复的图片信息:', imageInfo)
+        // 更新 store 状态
+        watermarkStore.setCurrentImage(imageInfo)
       }
-      const toFsPath = (url) => url.replace(/^file:\/\//, '').replace(/^\//, '').replace(/\//g, '\\')
-      const basePath = toFsPath(imagePreviewUrl)
-      await window.javaApi.processImage(basePath, config)
-      ElMessage.success('图片处理完成！')
     } catch (e) {
-      ElMessage.error('处理失败：' + e.message)
-    } finally {
-      appStore.setProcessing(false)
+      console.warn('无法从 localStorage 恢复图片信息:', e)
     }
+  }
+  
+  // 最终验证
+  if (!imageInfo || !imageInfo.path) {
+    console.error('图片验证失败 - imageInfo:', imageInfo)
+    ElMessage.error('请先选择要处理的图片')
+    return
+  }
+  
+  console.log('图片验证成功，开始处理...')
+  
+  appStore.setProcessing(true)
+  
+  try {
+    const config = { ...watermarkConfig }
+    
+    // 如果设置了输出路径，则添加到配置中
+    if (outputPath.value) {
+      config.outputPath = outputPath.value
+    }
+    
+    console.log('处理配置:', config)
+    
+    // 验证水印图片
+    if (config.type === 'IMAGE' && !config.imagePath) {
+      ElMessage.error('请先选择水印图片')
+      return
+    }
+    
+    // 使用验证通过的imageInfo中的路径
+    const imagePath = imageInfo.path
+    console.log('使用的图片路径:', imagePath)
+    
+    if (!imagePath) {
+      ElMessage.error('图片路径无效，请重新选择图片')
+      return
+    }
+    
+    ElMessage.info('开始处理图片，请稍候...')
+    console.log('调用processImage API，图片路径:', imagePath)
+    console.log('配置参数:', config)
+    
+    // 创建配置副本并处理路径字符串，避免过度转义
+    const configForBackend = { ...config }
+    if (configForBackend.outputPath) {
+      // 将反斜杠转换为正斜杠，避免JSON转义问题
+      configForBackend.outputPath = configForBackend.outputPath.replace(/\\/g, '/')
+      console.log('处理后的输出路径:', configForBackend.outputPath)
+    }
+    if (configForBackend.imagePath) {
+      // 同样处理水印图片路径
+      configForBackend.imagePath = configForBackend.imagePath.replace(/\\/g, '/')
+    }
+    
+    const configJson = JSON.stringify(configForBackend)
+    console.log('配置JSON:', configJson)
+    
+    // 后端API检查
+    if (typeof window.javaApi.processImage !== 'function') {
+      console.error('processImage API 不可用')
+      ElMessage.error('processImage API 不可用')
+      return
+    }
+    
+    // 后端接口需要两个参数：路径和配置JSON字符串
+    const result = await window.javaApi.processImage(imagePath, configJson)
+    console.log('处理结果:', result)
+    
+    if (result && result.success !== false) {
+      ElMessage.success('图片处理完成！输出路径: ' + (result.outputPath || result))
+    } else {
+      ElMessage.error('图片处理失败: ' + (result.message || '未知错误'))
+    }
+    
+  } catch (error) {
+    console.error('处理图片时出错:', error)
+    ElMessage.error('处理失败: ' + (error.message || error.toString()))
+  } finally {
+    appStore.setProcessing(false)
   }
 }
 
 const resetConfig = () => {
   watermarkStore.resetWatermarkConfig()
+}
+
+// 清除所有状态
+const clearAll = () => {
+  watermarkStore.resetAll()
+  outputPath.value = ''
+  ElMessage.success('已清除所有状态')
+  console.log('用户手动清除所有状态')
 }
 </script>
 
