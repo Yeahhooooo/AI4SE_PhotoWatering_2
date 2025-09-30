@@ -291,7 +291,6 @@ const selectImageFolder = async () => {
 // 选择预览图片
 const selectImageForPreview = (img) => {
   watermarkStore.setCurrentImage(img)
-  console.log('预览图片:', img)
 }
 
 // 统一的处理方法
@@ -611,9 +610,16 @@ const zoomOut = () => {
   previewState.value.scale = Math.max(previewState.value.scale / 1.2, 0.1)
 }
 
-// 鼠标滚轮缩放
+// 鼠标滚轮缩放（节流处理）
+let wheelTimeout = null
 const handleWheel = (event) => {
   event.preventDefault()
+  
+  if (wheelTimeout) return
+  wheelTimeout = setTimeout(() => {
+    wheelTimeout = null
+  }, 16) // 约60fps
+  
   const delta = event.deltaY > 0 ? 0.9 : 1.1
   previewState.value.scale = Math.max(0.1, Math.min(5.0, previewState.value.scale * delta))
 }
@@ -647,7 +653,6 @@ const handlePreviewMouseUp = () => {
 
 // 水印鼠标按下
 const handleWatermarkMouseDown = (event) => {
-  console.log('水印拖拽开始')
   
   watermarkDragState.value.isDragging = true
   watermarkDragState.value.dragStartX = event.clientX
@@ -676,6 +681,17 @@ const handleWatermarkMouseDown = (event) => {
   document.addEventListener('mouseup', handleWatermarkMouseUp)
 }
 
+// 防抖函数用于优化水印位置更新
+let updatePositionTimeout = null
+const debouncedUpdateWatermarkPosition = () => {
+  if (updatePositionTimeout) {
+    clearTimeout(updatePositionTimeout)
+  }
+  updatePositionTimeout = setTimeout(() => {
+    updateWatermarkPosition()
+  }, 16) // 60fps
+}
+
 // 水印鼠标移动
 const handleWatermarkMouseMove = (event) => {
   if (!watermarkDragState.value.isDragging || !previewImage.value) return
@@ -694,8 +710,8 @@ const handleWatermarkMouseMove = (event) => {
   watermarkDragState.value.watermarkX = Math.max(0, Math.min(mouseX, imgWidth - 60)) // 60是水印大概宽度
   watermarkDragState.value.watermarkY = Math.max(0, Math.min(mouseY, imgHeight - 30)) // 30是水印大概高度
   
-  // 根据新位置更新position配置
-  updateWatermarkPosition()
+  // 使用防抖处理位置更新
+  debouncedUpdateWatermarkPosition()
   
   event.preventDefault()
 }
@@ -729,12 +745,13 @@ const updateWatermarkPosition = () => {
   watermarkConfig.offsetX = Math.round(watermarkDragState.value.watermarkX * scaleX)
   watermarkConfig.offsetY = Math.round(watermarkDragState.value.watermarkY * scaleY)
   
-  console.log('更新精确位置:', {
-    displayCoords: { x: watermarkDragState.value.watermarkX, y: watermarkDragState.value.watermarkY },
-    actualCoords: { x: watermarkConfig.offsetX, y: watermarkConfig.offsetY },
-    scale: { x: scaleX, y: scaleY },
-    imageSize: { natural: [imgNaturalWidth, imgNaturalHeight], display: [imgRect.width, imgRect.height] }
-  })
+  // 调试信息（开发环境）
+  if (process.env.NODE_ENV === 'development') {
+    console.log('更新精确位置:', {
+      displayCoords: { x: watermarkDragState.value.watermarkX, y: watermarkDragState.value.watermarkY },
+      actualCoords: { x: watermarkConfig.offsetX, y: watermarkConfig.offsetY }
+    })
+  }
 }
 
 // 生成文件名预览
@@ -791,10 +808,10 @@ onMounted(() => {
     resetZoom()
   })
   
-  // 监听水印配置变化以实现实时预览
-  watch(() => watermarkConfig, () => {
-    console.log('水印配置变化，触发实时预览更新')
-  }, { deep: true })
+  // 监听水印配置的关键属性变化
+  watch([() => watermarkConfig.text, () => watermarkConfig.fontSize, () => watermarkConfig.fontColor, () => watermarkConfig.opacity, () => watermarkConfig.rotation], () => {
+    // 水印配置变化，实时预览更新
+  })
   
   // 监听position变化，仅在选择预设位置时重置拖拽状态
   watch(() => watermarkConfig.position, (newPosition) => {
@@ -802,7 +819,6 @@ onMounted(() => {
     if (newPosition !== 'CUSTOM') {
       watermarkDragState.value.watermarkX = 0
       watermarkDragState.value.watermarkY = 0
-      console.log('选择九宫格位置:', newPosition, '重置拖拽状态')
     }
   })
 })
