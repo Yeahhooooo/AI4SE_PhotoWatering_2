@@ -15,7 +15,7 @@
             <h4>已上传图片（{{ uploadedImages.length }}张，点击切换预览）</h4>
             <el-scrollbar height="120px">
               <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <div v-for="img in uploadedImages" :key="img.path" class="uploaded-image-item" @click="previewImage(img)">
+                <div v-for="img in uploadedImages" :key="img.path" class="uploaded-image-item" @click="selectImageForPreview(img)">
                   <img :src="toFileUrl(img.path)" alt="" style="width: 60px; height: 60px; object-fit: cover; border: 2px solid #409eff; cursor: pointer;" />
                   <div style="font-size: 12px; text-align: center; max-width: 60px; overflow: hidden; text-overflow: ellipsis;">{{ img.name }}</div>
                 </div>
@@ -23,9 +23,65 @@
             </el-scrollbar>
           </div>
           <!-- 主预览窗口 -->
-          <div v-if="watermarkStore.imagePreviewUrl" class="image-preview" :key="watermarkStore.imagePreviewUrl">
-            <img :src="watermarkStore.imagePreviewUrl" alt="预览" @load="onImageLoad" @error="onImageError" />
-            <p>{{ watermarkStore.currentImage?.path || '未选择图片' }}</p>
+          <div v-if="watermarkStore.imagePreviewUrl" class="interactive-preview-container">
+            <div class="preview-toolbar">
+              <el-button-group size="small">
+                <el-button @click="resetZoom" icon="Refresh">重置</el-button>
+                <el-button @click="zoomIn" icon="ZoomIn">放大</el-button>
+                <el-button @click="zoomOut" icon="ZoomOut">缩小</el-button>
+              </el-button-group>
+              <span class="zoom-info">{{ Math.round(previewState.scale * 100) }}%</span>
+            </div>
+            <div 
+              ref="previewContainer" 
+              class="interactive-preview" 
+              @wheel="handleWheel"
+              @mousedown="handlePreviewMouseDown"
+              @mousemove="handlePreviewMouseMove"
+              @mouseup="handlePreviewMouseUp"
+              @mouseleave="handlePreviewMouseUp"
+            >
+              <div 
+                class="preview-content"
+                :style="{
+                  transform: `translate(${previewState.offsetX}px, ${previewState.offsetY}px) scale(${previewState.scale})`,
+                  transformOrigin: 'top left'
+                }"
+              >
+                <div class="preview-image-container" :style="{ position: 'relative', display: 'inline-block' }">
+                  <img 
+                    ref="previewImage"
+                    :src="watermarkStore.imagePreviewUrl" 
+                    alt="预览" 
+                    @load="onImageLoad" 
+                    @error="onImageError"
+                    :style="{ display: 'block', maxWidth: '100%', height: 'auto' }"
+                  />
+                  <!-- 水印预览层 -->
+                  <div 
+                    v-if="showWatermarkPreview"
+                    class="watermark-overlay"
+                    :style="watermarkOverlayStyle"
+                    @mousedown="handleWatermarkMouseDown"
+                  >
+                    <div 
+                      class="watermark-content"
+                      :style="watermarkContentStyle"
+                    >
+                      {{ watermarkConfig.type === 'TEXT' ? watermarkConfig.text : '图片水印' }}
+                    </div>
+                    <!-- 拖拽控制点 -->
+                    <div class="drag-handles">
+                      <div class="drag-handle drag-handle-center"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="preview-info">
+              <p>{{ watermarkStore.currentImage?.path || '未选择图片' }}</p>
+              <p v-if="showWatermarkPreview">水印位置: {{ watermarkConfig.position }} | 透明度: {{ Math.round(watermarkConfig.opacity * 100) }}%</p>
+            </div>
           </div>
         </el-col>
         <el-col :span="12">
@@ -65,11 +121,19 @@
             <el-form-item label="位置">
               <el-select v-model="watermarkConfig.position">
                 <el-option label="左上" value="TOP_LEFT" />
+                <el-option label="上中" value="TOP_CENTER" />
                 <el-option label="右上" value="TOP_RIGHT" />
+                <el-option label="左中" value="MIDDLE_LEFT" />
+                <el-option label="居中" value="MIDDLE_CENTER" />
+                <el-option label="右中" value="MIDDLE_RIGHT" />
                 <el-option label="左下" value="BOTTOM_LEFT" />
+                <el-option label="下中" value="BOTTOM_CENTER" />
                 <el-option label="右下" value="BOTTOM_RIGHT" />
-                <el-option label="居中" value="CENTER" />
+                <el-option label="自定义位置" value="CUSTOM" />
               </el-select>
+              <el-text v-if="watermarkConfig.position === 'CUSTOM'" size="small" type="info" style="margin-left: 8px;">
+                精确坐标: ({{ watermarkConfig.offsetX }}, {{ watermarkConfig.offsetY }})
+              </el-text>
             </el-form-item>
             <el-form-item label="透明度">
               <el-slider v-model="watermarkConfig.opacity" :min="0" :max="1" :step="0.01" />
@@ -122,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, watch, nextTick, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useWatermarkStore } from '../stores/watermark'
 import { useAppStore } from '../stores/app'
@@ -158,7 +222,7 @@ const selectSingleImages = async () => {
         
         // 自动预览最后添加的图片
         if (newImages.length > 0) {
-          previewImage(newImages[newImages.length - 1])
+          selectImageForPreview(newImages[newImages.length - 1])
         }
       } else {
         ElMessage.warning('没有选择图片文件')
@@ -207,7 +271,7 @@ const selectImageFolder = async () => {
           
           // 自动预览第一张新添加的图片
           if (newImages.length > 0) {
-            previewImage(newImages[0])
+            selectImageForPreview(newImages[0])
           }
         } else {
           ElMessage.warning('该文件夹下没有图片文件')
@@ -224,8 +288,8 @@ const selectImageFolder = async () => {
   }
 }
 
-// 预览图片
-const previewImage = (img) => {
+// 选择预览图片
+const selectImageForPreview = (img) => {
   watermarkStore.setCurrentImage(img)
   console.log('预览图片:', img)
 }
@@ -378,6 +442,301 @@ const outputConfig = ref({
   fileSuffix: '_watermarked'
 })
 
+// 预览状态管理
+const previewState = ref({
+  scale: 1.0,        // 缩放比例
+  offsetX: 0,        // X轴偏移
+  offsetY: 0,        // Y轴偏移
+  isDragging: false, // 是否正在拖拽预览
+  dragStartX: 0,     // 拖拽起始X
+  dragStartY: 0,     // 拖拽起始Y
+  dragStartOffsetX: 0, // 拖拽起始偏移X
+  dragStartOffsetY: 0  // 拖拽起始偏移Y
+})
+
+// 水印拖拽状态
+const watermarkDragState = ref({
+  isDragging: false,  // 是否正在拖拽水印
+  dragStartX: 0,      // 拖拽起始X
+  dragStartY: 0,      // 拖拽起始Y
+  watermarkX: 0,      // 水印X坐标
+  watermarkY: 0,      // 水印Y坐标
+  offsetX: 0,         // 鼠标相对于水印的X偏移
+  offsetY: 0          // 鼠标相对于水印的Y偏移
+})
+
+// 预览相关的DOM引用
+const previewContainer = ref(null)
+const previewImage = ref(null)
+
+// 是否显示水印预览
+const showWatermarkPreview = computed(() => {
+  return watermarkStore.imagePreviewUrl && 
+         (watermarkConfig.text || watermarkConfig.imagePath)
+})
+
+// 水印覆盖层样式
+const watermarkOverlayStyle = computed(() => {
+  if (!previewImage.value) return {}
+  
+  const position = watermarkConfig.position || 'BOTTOM_RIGHT'
+  const imgRect = previewImage.value.getBoundingClientRect()
+  const imgNaturalWidth = previewImage.value.naturalWidth
+  const imgNaturalHeight = previewImage.value.naturalHeight
+  const imgDisplayWidth = previewImage.value.offsetWidth
+  const imgDisplayHeight = previewImage.value.offsetHeight
+  
+  // 计算缩放比例
+  const scaleRatio = Math.min(imgDisplayWidth / imgNaturalWidth, imgDisplayHeight / imgNaturalHeight)
+  
+  // 估算水印尺寸（用于对齐计算）
+  const fontSize = watermarkConfig.fontSize || 24
+  const text = watermarkConfig.text || '水印'
+  const estimatedWatermarkWidth = text.length * fontSize * 0.7 + 24 // 大致估算宽度
+  const estimatedWatermarkHeight = fontSize + 16 // 大致估算高度
+  
+  // 根据位置计算水印坐标
+  let x = 20, y = 20
+  const padding = 20
+  
+  switch (position) {
+    case 'TOP_LEFT':
+      x = padding
+      y = padding
+      break
+    case 'TOP_CENTER':
+      x = (imgDisplayWidth - estimatedWatermarkWidth) / 2
+      y = padding
+      break
+    case 'TOP_RIGHT':
+      x = imgDisplayWidth - estimatedWatermarkWidth - padding
+      y = padding
+      break
+    case 'MIDDLE_LEFT':
+      x = padding
+      y = (imgDisplayHeight - estimatedWatermarkHeight) / 2
+      break
+    case 'MIDDLE_CENTER':
+    case 'CENTER':
+      x = (imgDisplayWidth - estimatedWatermarkWidth) / 2
+      y = (imgDisplayHeight - estimatedWatermarkHeight) / 2
+      break
+    case 'MIDDLE_RIGHT':
+      x = imgDisplayWidth - estimatedWatermarkWidth - padding
+      y = (imgDisplayHeight - estimatedWatermarkHeight) / 2
+      break
+    case 'BOTTOM_LEFT':
+      x = padding
+      y = imgDisplayHeight - estimatedWatermarkHeight - padding
+      break
+    case 'BOTTOM_CENTER':
+      x = (imgDisplayWidth - estimatedWatermarkWidth) / 2
+      y = imgDisplayHeight - estimatedWatermarkHeight - padding
+      break
+    case 'BOTTOM_RIGHT':
+      x = imgDisplayWidth - estimatedWatermarkWidth - padding
+      y = imgDisplayHeight - estimatedWatermarkHeight - padding
+      break
+    case 'CUSTOM':
+      // 自定义位置：将后端的offsetX/offsetY转换为显示坐标
+      if (imgNaturalWidth && imgNaturalHeight && imgDisplayWidth && imgDisplayHeight) {
+        const scaleX = imgDisplayWidth / imgNaturalWidth
+        const scaleY = imgDisplayHeight / imgNaturalHeight
+        x = (watermarkConfig.offsetX || 0) * scaleX
+        y = (watermarkConfig.offsetY || 0) * scaleY
+      }
+      break
+    default:
+      x = imgDisplayWidth - estimatedWatermarkWidth - padding
+      y = imgDisplayHeight - estimatedWatermarkHeight - padding
+      break
+  }
+  
+  // 如果正在拖拽，优先使用拖拽位置
+  if (watermarkDragState.value.isDragging || 
+      (position === 'CUSTOM' && (watermarkDragState.value.watermarkX !== 0 || watermarkDragState.value.watermarkY !== 0))) {
+    x = watermarkDragState.value.watermarkX
+    y = watermarkDragState.value.watermarkY
+  }
+  
+  return {
+    position: 'absolute',
+    left: `${x}px`,
+    top: `${y}px`,
+    cursor: 'move',
+    userSelect: 'none',
+    zIndex: 10
+  }
+})
+
+// 水印内容样式
+const watermarkContentStyle = computed(() => {
+  const fontSize = watermarkConfig.fontSize || 24
+  const fontColor = watermarkConfig.fontColor || '#FFFFFF'
+  const opacity = watermarkConfig.opacity || 0.7
+  const rotation = watermarkConfig.rotation || 0
+  
+  return {
+    fontSize: `${fontSize}px`,
+    color: fontColor,
+    opacity: opacity,
+    transform: `rotate(${rotation}deg)`,
+    fontWeight: 'bold',
+    textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
+    padding: '8px 12px',
+    border: '2px dashed rgba(255,255,255,0.5)',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    minWidth: '60px',
+    textAlign: 'center'
+  }
+})
+
+// ==================== 预览交互方法 ====================
+
+// 重置缩放和位置
+const resetZoom = () => {
+  previewState.value.scale = 1.0
+  previewState.value.offsetX = 0
+  previewState.value.offsetY = 0
+}
+
+// 放大
+const zoomIn = () => {
+  previewState.value.scale = Math.min(previewState.value.scale * 1.2, 5.0)
+}
+
+// 缩小
+const zoomOut = () => {
+  previewState.value.scale = Math.max(previewState.value.scale / 1.2, 0.1)
+}
+
+// 鼠标滚轮缩放
+const handleWheel = (event) => {
+  event.preventDefault()
+  const delta = event.deltaY > 0 ? 0.9 : 1.1
+  previewState.value.scale = Math.max(0.1, Math.min(5.0, previewState.value.scale * delta))
+}
+
+// 预览区域鼠标按下
+const handlePreviewMouseDown = (event) => {
+  if (event.target.closest('.watermark-overlay')) return // 不处理水印区域的事件
+  
+  previewState.value.isDragging = true
+  previewState.value.dragStartX = event.clientX
+  previewState.value.dragStartY = event.clientY
+  previewState.value.dragStartOffsetX = previewState.value.offsetX
+  previewState.value.dragStartOffsetY = previewState.value.offsetY
+  event.preventDefault()
+}
+
+// 预览区域鼠标移动
+const handlePreviewMouseMove = (event) => {
+  if (previewState.value.isDragging) {
+    const deltaX = event.clientX - previewState.value.dragStartX
+    const deltaY = event.clientY - previewState.value.dragStartY
+    previewState.value.offsetX = previewState.value.dragStartOffsetX + deltaX
+    previewState.value.offsetY = previewState.value.dragStartOffsetY + deltaY
+  }
+}
+
+// 预览区域鼠标抬起
+const handlePreviewMouseUp = () => {
+  previewState.value.isDragging = false
+}
+
+// 水印鼠标按下
+const handleWatermarkMouseDown = (event) => {
+  console.log('水印拖拽开始')
+  
+  watermarkDragState.value.isDragging = true
+  watermarkDragState.value.dragStartX = event.clientX
+  watermarkDragState.value.dragStartY = event.clientY
+  
+  // 获取图片容器的位置信息
+  if (!previewImage.value) return
+  
+  const imgRect = previewImage.value.getBoundingClientRect()
+  const watermarkElement = event.currentTarget
+  const watermarkRect = watermarkElement.getBoundingClientRect()
+  
+  // 计算相对于图片的位置（不考虑缩放和偏移）
+  watermarkDragState.value.watermarkX = watermarkRect.left - imgRect.left
+  watermarkDragState.value.watermarkY = watermarkRect.top - imgRect.top
+  
+  // 记录鼠标相对于水印的偏移
+  watermarkDragState.value.offsetX = event.clientX - watermarkRect.left
+  watermarkDragState.value.offsetY = event.clientY - watermarkRect.top
+  
+  event.preventDefault()
+  event.stopPropagation()
+  
+  // 添加全局鼠标事件监听
+  document.addEventListener('mousemove', handleWatermarkMouseMove)
+  document.addEventListener('mouseup', handleWatermarkMouseUp)
+}
+
+// 水印鼠标移动
+const handleWatermarkMouseMove = (event) => {
+  if (!watermarkDragState.value.isDragging || !previewImage.value) return
+  
+  // 获取图片位置信息
+  const imgRect = previewImage.value.getBoundingClientRect()
+  
+  // 计算鼠标相对于图片的位置
+  const mouseX = event.clientX - imgRect.left - watermarkDragState.value.offsetX
+  const mouseY = event.clientY - imgRect.top - watermarkDragState.value.offsetY
+  
+  // 限制在图片范围内
+  const imgWidth = imgRect.width
+  const imgHeight = imgRect.height
+  
+  watermarkDragState.value.watermarkX = Math.max(0, Math.min(mouseX, imgWidth - 60)) // 60是水印大概宽度
+  watermarkDragState.value.watermarkY = Math.max(0, Math.min(mouseY, imgHeight - 30)) // 30是水印大概高度
+  
+  // 根据新位置更新position配置
+  updateWatermarkPosition()
+  
+  event.preventDefault()
+}
+
+// 水印鼠标抬起
+const handleWatermarkMouseUp = () => {
+  watermarkDragState.value.isDragging = false
+  
+  // 移除全局事件监听
+  document.removeEventListener('mousemove', handleWatermarkMouseMove)
+  document.removeEventListener('mouseup', handleWatermarkMouseUp)
+}
+
+// 根据拖拽位置更新水印position配置
+const updateWatermarkPosition = () => {
+  if (!previewImage.value) return
+  
+  // 拖拽时使用精确位置模式
+  watermarkConfig.position = 'CUSTOM'
+  
+  // 计算相对于图片的精确坐标
+  const imgRect = previewImage.value.getBoundingClientRect()
+  const imgNaturalWidth = previewImage.value.naturalWidth
+  const imgNaturalHeight = previewImage.value.naturalHeight
+  
+  // 计算显示尺寸与实际尺寸的比例
+  const scaleX = imgNaturalWidth / imgRect.width
+  const scaleY = imgNaturalHeight / imgRect.height
+  
+  // 将显示坐标转换为实际图片坐标
+  watermarkConfig.offsetX = Math.round(watermarkDragState.value.watermarkX * scaleX)
+  watermarkConfig.offsetY = Math.round(watermarkDragState.value.watermarkY * scaleY)
+  
+  console.log('更新精确位置:', {
+    displayCoords: { x: watermarkDragState.value.watermarkX, y: watermarkDragState.value.watermarkY },
+    actualCoords: { x: watermarkConfig.offsetX, y: watermarkConfig.offsetY },
+    scale: { x: scaleX, y: scaleY },
+    imageSize: { natural: [imgNaturalWidth, imgNaturalHeight], display: [imgRect.width, imgRect.height] }
+  })
+}
+
 // 生成文件名预览
 const getFileNamePreview = () => {
   const sampleName = '示例图片.jpg'
@@ -421,10 +780,30 @@ onMounted(() => {
   // 监听图片状态变化
   watch(() => watermarkStore.currentImage, (newVal, oldVal) => {
     console.log('当前图片状态变化:', oldVal, '->', newVal)
+    // 重置水印拖拽状态
+    watermarkDragState.value.watermarkX = 0
+    watermarkDragState.value.watermarkY = 0
   }, { deep: true })
   
   watch(() => watermarkStore.imagePreviewUrl, (newVal, oldVal) => {
     console.log('图片预览URL变化:', oldVal, '->', newVal)
+    // 重置预览状态
+    resetZoom()
+  })
+  
+  // 监听水印配置变化以实现实时预览
+  watch(() => watermarkConfig, () => {
+    console.log('水印配置变化，触发实时预览更新')
+  }, { deep: true })
+  
+  // 监听position变化，仅在选择预设位置时重置拖拽状态
+  watch(() => watermarkConfig.position, (newPosition) => {
+    // 只有当选择的是非自定义位置时，才重置拖拽状态
+    if (newPosition !== 'CUSTOM') {
+      watermarkDragState.value.watermarkX = 0
+      watermarkDragState.value.watermarkY = 0
+      console.log('选择九宫格位置:', newPosition, '重置拖拽状态')
+    }
   })
 })
 
@@ -798,6 +1177,117 @@ const clearAll = () => {
 .image-uploader {
   margin-bottom: 20px;
 }
+
+/* 交互式预览容器 */
+.interactive-preview-container {
+  margin-top: 10px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.zoom-info {
+  font-size: 12px;
+  color: #666;
+  font-weight: bold;
+}
+
+.interactive-preview {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  overflow: hidden;
+  cursor: grab;
+  background: 
+    radial-gradient(circle, #ccc 1px, transparent 1px);
+  background-size: 20px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.interactive-preview:active {
+  cursor: grabbing;
+}
+
+.preview-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.preview-image-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* 水印覆盖层 */
+.watermark-overlay {
+  position: absolute;
+  cursor: move;
+  user-select: none;
+  z-index: 10;
+  transition: all 0.1s ease;
+}
+
+.watermark-overlay:hover {
+  transform: scale(1.02);
+}
+
+.watermark-content {
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 拖拽控制点 */
+.drag-handles {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.drag-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #409eff;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.drag-handle-center {
+  top: -4px;
+  left: -4px;
+}
+
+.preview-info {
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-top: 1px solid #eee;
+  font-size: 12px;
+  color: #666;
+}
+
+.preview-info p {
+  margin: 2px 0;
+}
+
+/* 兼容原有样式 */
 .image-preview {
   margin-top: 10px;
   border: 1px solid #eee;

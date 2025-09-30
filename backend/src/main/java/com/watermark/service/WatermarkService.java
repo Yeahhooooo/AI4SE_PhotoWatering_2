@@ -277,10 +277,12 @@ public class WatermarkService {
             if (config.watermarkHeight == 0) config.watermarkHeight = 100;
             
             config.offsetX = jsonObject.getIntValue("offsetX");
-            if (config.offsetX == 0) config.offsetX = 20;
+            // 只有当JSON中没有offsetX字段时才使用默认值，允许0值
+            if (!jsonObject.containsKey("offsetX")) config.offsetX = 20;
             
             config.offsetY = jsonObject.getIntValue("offsetY");
-            if (config.offsetY == 0) config.offsetY = 20;
+            // 只有当JSON中没有offsetY字段时才使用默认值，允许0值
+            if (!jsonObject.containsKey("offsetY")) config.offsetY = 20;
             
             config.rotation = jsonObject.getFloatValue("rotation");
             
