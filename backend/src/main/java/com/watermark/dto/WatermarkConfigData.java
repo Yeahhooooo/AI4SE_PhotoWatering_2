@@ -44,6 +44,27 @@ public class WatermarkConfigData {
     public int watermarkHeight = 100;      // 水印高度
     public boolean maintainAspectRatio = true; // 保持宽高比
     
+    // 输出配置
+    public OutputConfig outputConfig = new OutputConfig();
+    
+    /**
+     * 输出配置内部类
+     */
+    public static class OutputConfig {
+        public String namingRule = "suffix";  // original, prefix, suffix, custom
+        public String filePrefix = "wm_";     // 文件前缀
+        public String fileSuffix = "_watermarked"; // 文件后缀
+        
+        public OutputConfig() {
+        }
+        
+        public OutputConfig(String namingRule, String filePrefix, String fileSuffix) {
+            this.namingRule = namingRule;
+            this.filePrefix = filePrefix;
+            this.fileSuffix = fileSuffix;
+        }
+    }
+    
     /**
      * 默认构造函数
      */

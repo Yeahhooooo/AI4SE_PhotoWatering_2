@@ -80,6 +80,27 @@
             <el-form-item label="照片缩放比例">
               <el-input-number v-model="watermarkConfig.scale" :min="0.1" :max="5" :step="0.1" />
             </el-form-item>
+            
+            <!-- 文件命名规则配置 -->
+            <el-divider content-position="left">导出设置</el-divider>
+            <el-form-item label="文件命名规则">
+              <el-radio-group v-model="outputConfig.namingRule">
+                <el-radio label="original">保留原文件名</el-radio>
+                <el-radio label="prefix">添加前缀</el-radio>
+                <el-radio label="suffix">添加后缀</el-radio>
+                <el-radio label="custom">自定义前缀+后缀</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item v-if="outputConfig.namingRule === 'prefix' || outputConfig.namingRule === 'custom'" label="文件前缀">
+              <el-input v-model="outputConfig.filePrefix" placeholder="例如: wm_" style="width: 200px;" />
+            </el-form-item>
+            <el-form-item v-if="outputConfig.namingRule === 'suffix' || outputConfig.namingRule === 'custom'" label="文件后缀">
+              <el-input v-model="outputConfig.fileSuffix" placeholder="例如: _watermarked" style="width: 200px;" />
+            </el-form-item>
+            <el-form-item v-if="outputConfig.namingRule !== 'original'" label="命名预览">
+              <el-tag type="info">{{ getFileNamePreview() }}</el-tag>
+            </el-form-item>
+            
             <el-form-item label="输出路径">
               <el-input v-model="outputPath" placeholder="选择输出文件夹" readonly>
                 <template #append>
@@ -268,6 +289,9 @@ const processSingleImage = async (imageInfo) => {
     config.imagePath = config.imagePath.replace(/\\/g, '/')
   }
   
+  // 添加输出配置
+  config.outputConfig = { ...outputConfig.value }
+  
   const configJson = JSON.stringify(config)
   console.log('单张图片处理配置:', configJson)
   
@@ -291,6 +315,9 @@ const processBatchImages = async () => {
   if (config.imagePath) {
     config.imagePath = config.imagePath.replace(/\\/g, '/')
   }
+  
+  // 添加输出配置
+  config.outputConfig = { ...outputConfig.value }
   
   const imagePaths = uploadedImages.value.map(img => img.path)
   const imagePathsJson = JSON.stringify(imagePaths)
@@ -343,6 +370,33 @@ const appStore = useAppStore()
 // 使用computed或直接使用store，不要解构
 const watermarkConfig = watermarkStore.watermarkConfig
 const outputPath = ref('')
+
+// 输出配置
+const outputConfig = ref({
+  namingRule: 'suffix', // original, prefix, suffix, custom
+  filePrefix: 'wm_',
+  fileSuffix: '_watermarked'
+})
+
+// 生成文件名预览
+const getFileNamePreview = () => {
+  const sampleName = '示例图片.jpg'
+  const baseName = sampleName.substring(0, sampleName.lastIndexOf('.'))
+  const extension = sampleName.substring(sampleName.lastIndexOf('.'))
+  
+  switch (outputConfig.value.namingRule) {
+    case 'original':
+      return sampleName
+    case 'prefix':
+      return (outputConfig.value.filePrefix || '') + sampleName
+    case 'suffix':
+      return baseName + (outputConfig.value.fileSuffix || '') + extension
+    case 'custom':
+      return (outputConfig.value.filePrefix || '') + baseName + (outputConfig.value.fileSuffix || '') + extension
+    default:
+      return sampleName
+  }
+}
 
 // 安全地获取响应式属性
 const getImagePreviewUrl = () => {

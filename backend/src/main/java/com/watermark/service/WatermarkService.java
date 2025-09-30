@@ -217,7 +217,7 @@ public class WatermarkService {
             BufferedImage watermarkedImage = applyWatermark(originalImage, config);
             
             // 生成输出路径
-            String outputPath = generateOutputPath(imagePath, configData.outputPath);
+            String outputPath = generateOutputPath(imagePath, configData.outputPath, configData.outputConfig);
             
             // 保存图片
             saveImage(watermarkedImage, outputPath, getOutputFormat(outputPath));
@@ -284,8 +284,21 @@ public class WatermarkService {
             
             config.rotation = jsonObject.getFloatValue("rotation");
             
-            logger.debug("JSON解析完成: type={}, text={}, position={}, outputPath={}", 
-                config.type, config.text, config.position, config.outputPath);
+            // 解析输出配置
+            JSONObject outputConfigJson = jsonObject.getJSONObject("outputConfig");
+            if (outputConfigJson != null) {
+                config.outputConfig.namingRule = outputConfigJson.getString("namingRule");
+                if (config.outputConfig.namingRule == null) config.outputConfig.namingRule = "suffix";
+                
+                config.outputConfig.filePrefix = outputConfigJson.getString("filePrefix");
+                if (config.outputConfig.filePrefix == null) config.outputConfig.filePrefix = "wm_";
+                
+                config.outputConfig.fileSuffix = outputConfigJson.getString("fileSuffix");
+                if (config.outputConfig.fileSuffix == null) config.outputConfig.fileSuffix = "_watermarked";
+            }
+            
+            logger.debug("JSON解析完成: type={}, text={}, position={}, outputPath={}, namingRule={}", 
+                config.type, config.text, config.position, config.outputPath, config.outputConfig.namingRule);
             
             return config;
             
@@ -385,9 +398,9 @@ public class WatermarkService {
     }
     
     /**
-     * 生成输出路径
+     * 生成输出路径（支持自定义命名规则）
      */
-    private String generateOutputPath(String inputPath, String userOutputPath) {
+    private String generateOutputPath(String inputPath, String userOutputPath, WatermarkConfigData.OutputConfig outputConfig) {
         File inputFile = new File(inputPath);
         String fileName = inputFile.getName();
         String name = fileName;
@@ -399,17 +412,42 @@ public class WatermarkService {
             name = fileName.substring(0, dotIndex);
         }
         
-        String watermarkedName = name + "_watermarked" + extension;
+        // 根据命名规则生成新文件名
+        String newFileName;
+        String prefix = outputConfig.filePrefix != null ? outputConfig.filePrefix : "";
+        String suffix = outputConfig.fileSuffix != null ? outputConfig.fileSuffix : "";
+        
+        switch (outputConfig.namingRule) {
+            case "original":
+                newFileName = fileName;
+                break;
+            case "prefix":
+                newFileName = prefix + fileName;
+                break;
+            case "suffix":
+                newFileName = name + suffix + extension;
+                break;
+            case "custom":
+                newFileName = prefix + name + suffix + extension;
+                break;
+            default:
+                // 默认使用后缀模式
+                newFileName = name + "_watermarked" + extension;
+                break;
+        }
+        
+        logger.debug("文件命名规则: {}, 原文件名: {}, 新文件名: {}", 
+            outputConfig.namingRule, fileName, newFileName);
         
         if (userOutputPath != null && !userOutputPath.isEmpty()) {
             // 使用用户指定的输出路径
             String normalizedPath = userOutputPath.replace('/', File.separatorChar);
-            return new File(normalizedPath, watermarkedName).getAbsolutePath();
+            return new File(normalizedPath, newFileName).getAbsolutePath();
         } else {
             // 使用默认输出路径
             String outputDir = "output";
             new File(outputDir).mkdirs();
-            return outputDir + File.separator + watermarkedName;
+            return outputDir + File.separator + newFileName;
         }
     }
     
