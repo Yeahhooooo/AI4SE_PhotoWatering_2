@@ -42,6 +42,50 @@ const initJavaFXBridge = () => {
           { id: 1, name: '默认文本水印', type: 'TEXT' },
           { id: 2, name: '公司Logo', type: 'IMAGE' }
         ])
+      },
+      saveWatermarkTemplate: (templateJson) => {
+        console.log('模拟保存水印模板:', templateJson)
+        return Promise.resolve({ success: true, id: Date.now() })
+      },
+      getAllTemplates: () => {
+        console.log('模拟获取所有模板')
+        return Promise.resolve([
+          { 
+            id: 1, 
+            name: '默认文本水印', 
+            description: '默认的文本水印模板',
+            config: { type: 'TEXT', text: '水印文本', fontSize: 24 },
+            createdAt: new Date().toISOString()
+          },
+          { 
+            id: 2, 
+            name: '公司Logo', 
+            description: '公司品牌Logo水印',
+            config: { type: 'IMAGE', imagePath: '/mock/logo.png' },
+            createdAt: new Date().toISOString()
+          }
+        ])
+      },
+      deleteTemplate: (templateId) => {
+        console.log('模拟删除模板:', templateId)
+        return Promise.resolve({ success: true })
+      },
+      duplicateTemplate: (templateId) => {
+        console.log('模拟复制模板:', templateId)
+        return Promise.resolve({ 
+          success: true, 
+          id: Date.now(),
+          name: '模板副本',
+          config: { type: 'TEXT', text: '复制的水印' }
+        })
+      },
+      loadTemplate: (templateId) => {
+        console.log('模拟加载模板:', templateId)
+        return Promise.resolve({
+          id: templateId,
+          name: '测试模板',
+          config: { type: 'TEXT', text: '测试水印' }
+        })
       }
     }
   }

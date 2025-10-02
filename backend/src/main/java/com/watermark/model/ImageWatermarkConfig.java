@@ -33,6 +33,7 @@ public class ImageWatermarkConfig extends WatermarkConfig {
         copy.setOpacity(this.getOpacity());
         copy.setRotation(this.getRotation());
         copy.setScale(this.getScale());
+        copy.setOutputPath(this.getOutputPath());
         
         // 复制图片水印属性
         copy.imagePath = this.imagePath;

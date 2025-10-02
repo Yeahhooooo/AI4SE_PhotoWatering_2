@@ -19,6 +19,7 @@ public class DatabaseService {
     
     private static DatabaseService instance;
     private Connection connection;
+    private String dbPath; // 添加数据库路径字段
     
     private DatabaseService() {
         // 私有构造函数，单例模式
@@ -36,7 +37,7 @@ public class DatabaseService {
      */
     public void initialize() throws SQLException {
         try {
-            String dbPath = PathManager.getDatabasePath();
+            this.dbPath = PathManager.getDatabasePath(); // 设置实例字段
             String url = "jdbc:sqlite:" + dbPath;
             
             connection = DriverManager.getConnection(url);
@@ -192,9 +193,11 @@ public class DatabaseService {
     
     /**
      * 获取数据库连接
+     * 每次调用都创建新的连接，以避免连接关闭的问题
      */
-    public Connection getConnection() {
-        return connection;
+    public Connection getConnection() throws SQLException {
+        String url = "jdbc:sqlite:" + dbPath;
+        return DriverManager.getConnection(url);
     }
     
     /**

@@ -35,6 +35,7 @@ public abstract class WatermarkConfig {
     private float opacity = 0.7f;    // 透明度 (0.0-1.0)
     private float rotation = 0.0f;   // 旋转角度 (-180 to +180)
     private float scale = 1.0f;      // 缩放比例
+    private String outputPath = "";  // 输出路径
     
     public WatermarkConfig(WatermarkType type) {
         this.type = type;
@@ -69,6 +70,11 @@ public abstract class WatermarkConfig {
     public float getScale() { return scale; }
     public void setScale(float scale) { 
         this.scale = Math.max(0.1f, Math.min(5.0f, scale)); 
+    }
+    
+    public String getOutputPath() { return outputPath; }
+    public void setOutputPath(String outputPath) { 
+        this.outputPath = outputPath != null ? outputPath : ""; 
     }
     
     /**

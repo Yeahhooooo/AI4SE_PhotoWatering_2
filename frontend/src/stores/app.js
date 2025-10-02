@@ -46,12 +46,45 @@ export const useAppStore = defineStore('app', () => {
   
   // 加载模板
   const loadTemplates = async () => {
-    if (!javaApi.value) return
+    if (!window.javaApi) {
+      console.warn('JavaAPI未就绪，无法加载模板')
+      console.log('window.javaApi:', window.javaApi)
+      return
+    }
     
     try {
       setLoading(true)
-      const result = await javaApi.value.getTemplates()
-      templates.value = result || []
+      console.log('开始加载模板列表...')
+      console.log('getAllTemplates方法可用性:', typeof window.javaApi.getAllTemplates)
+      
+      // 检查getAllTemplates方法是否存在
+      if (typeof window.javaApi.getAllTemplates !== 'function') {
+        console.error('getAllTemplates方法不存在')
+        templates.value = []
+        return
+      }
+      
+      // 调用后端获取模板
+      const result = await window.javaApi.getAllTemplates()
+      console.log('模板加载原始结果:', result)
+      
+      // 处理结果
+      let templateList = []
+      if (typeof result === 'string') {
+        try {
+          const parsed = JSON.parse(result)
+          templateList = Array.isArray(parsed) ? parsed : []
+        } catch (e) {
+          console.error('解析模板JSON失败:', e)
+          templateList = []
+        }
+      } else if (Array.isArray(result)) {
+        templateList = result
+      }
+      
+      templates.value = templateList
+      console.log('模板加载完成:', templateList.length, '个模板')
+      
     } catch (error) {
       console.error('加载模板失败:', error)
       templates.value = []
@@ -62,11 +95,11 @@ export const useAppStore = defineStore('app', () => {
   
   // 加载处理历史
   const loadHistory = async () => {
-    if (!javaApi.value) return
+    if (!window.javaApi) return
     
     try {
       setLoading(true)
-      const result = await javaApi.value.getProcessHistory()
+      const result = await window.javaApi.getProcessHistory()
       history.value = result || []
     } catch (error) {
       console.error('加载历史记录失败:', error)

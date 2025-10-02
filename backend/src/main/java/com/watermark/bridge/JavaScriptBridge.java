@@ -1,6 +1,7 @@
 package com.watermark.bridge;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.watermark.model.ImageInfo;
 import com.watermark.model.WatermarkConfig;
 import com.watermark.model.WatermarkTemplate;
@@ -39,12 +40,16 @@ public class JavaScriptBridge {
     private Stage stage; // 用于显示文件对话框
     
     public JavaScriptBridge() {
+        System.out.println("=== JavaScriptBridge 构造函数被调用 ===");
         this.objectMapper = new ObjectMapper();
+        this.objectMapper.findAndRegisterModules(); // 注册JSR310模块支持LocalDateTime
+        this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); // 忽略未知属性
         this.imageService = ImageService.getInstance();
         this.watermarkService = WatermarkService.getInstance();
         this.templateService = TemplateService.getInstance();
         this.exportService = ExportService.getInstance();
         
+        System.out.println("JavaScriptBridge 初始化完成");
         logger.info("JavaScript桥接器初始化完成");
     }
     
@@ -369,11 +374,20 @@ public class JavaScriptBridge {
      * 保存水印模板
      */
     public String saveWatermarkTemplate(String templateJson) {
+        System.out.println("=== saveWatermarkTemplate 被调用 ===");
+        System.out.println("输入参数: " + templateJson);
+        logger.info("保存水印模板被调用，参数: {}", templateJson);
+        
         try {
             WatermarkTemplate template = objectMapper.readValue(templateJson, WatermarkTemplate.class);
             WatermarkTemplate savedTemplate = templateService.saveTemplate(template);
-            return objectMapper.writeValueAsString(savedTemplate);
+            
+            String result = objectMapper.writeValueAsString(savedTemplate);
+            System.out.println("保存结果: " + result);
+            return result;
         } catch (Exception e) {
+            System.err.println("保存模板失败: " + e.getMessage());
+            e.printStackTrace();
             logger.error("保存水印模板失败", e);
             return createErrorResponse("保存模板失败: " + e.getMessage());
         }
@@ -384,6 +398,7 @@ public class JavaScriptBridge {
      */
     public String getAllTemplates() {
         try {
+            System.out.println("获取所有模板被调用");
             List<WatermarkTemplate> templates = templateService.getAllTemplates();
             return objectMapper.writeValueAsString(templates);
         } catch (Exception e) {
@@ -402,6 +417,23 @@ public class JavaScriptBridge {
         } catch (Exception e) {
             logger.error("删除模板失败", e);
             return createErrorResponse("删除模板失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 复制模板
+     */
+    public String duplicateTemplate(long templateId) {
+        try {
+            WatermarkTemplate duplicatedTemplate = templateService.duplicateTemplate(templateId);
+            if (duplicatedTemplate != null) {
+                return objectMapper.writeValueAsString(duplicatedTemplate);
+            } else {
+                return createErrorResponse("模板复制失败");
+            }
+        } catch (Exception e) {
+            logger.error("复制模板失败", e);
+            return createErrorResponse("复制模板失败: " + e.getMessage());
         }
     }
     
@@ -433,6 +465,7 @@ public class JavaScriptBridge {
      * 保存模板 (前端兼容方法)
      */
     public String saveTemplate(String templateJson) {
+        System.out.println("Saving template: " + templateJson);
         return saveWatermarkTemplate(templateJson);
     }
     

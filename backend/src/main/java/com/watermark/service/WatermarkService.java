@@ -349,6 +349,9 @@ public class WatermarkService {
                 config.setPosition(WatermarkConfig.Position.BOTTOM_RIGHT);
             }
             
+            // 设置输出路径
+            config.setOutputPath(configData.outputPath);
+            
             // 设置图片水印特有属性
             config.setWidth(configData.watermarkWidth);
             config.setHeight(configData.watermarkHeight);
@@ -377,6 +380,9 @@ public class WatermarkService {
                 logger.warn("无效的位置配置: {}, 使用默认值", configData.position);
                 config.setPosition(WatermarkConfig.Position.BOTTOM_RIGHT);
             }
+            
+            // 设置输出路径
+            config.setOutputPath(configData.outputPath);
             
             // 设置文本水印特有属性
             config.setFontFamily(configData.fontFamily);

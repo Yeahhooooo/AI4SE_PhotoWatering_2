@@ -1,7 +1,26 @@
 <template>
   <div class="watermark-editor">
     <el-card shadow="hover" class="editor-card">
-      <h2>水印编辑</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>水印编辑</h2>
+        <div>
+          <el-button type="info" @click="showTemplateManager" :icon="Collection">模板管理</el-button>
+          <el-button type="primary" @click="showSaveTemplateDialog" :icon="DocumentAdd">保存模板</el-button>
+          <el-dropdown @command="handleQuickTemplate" style="margin-left: 10px;">
+            <el-button type="success">
+              快速模板<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="template in recentTemplates" :key="template.id" :command="template">
+                  {{ template.name }}
+                </el-dropdown-item>
+                <el-dropdown-item divided command="manage">管理所有模板</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
       <el-row :gutter="20">
         <el-col :span="12">
           <!-- 图片选择与预览 -->
@@ -182,16 +201,28 @@
         </el-col>
       </el-row>
     </el-card>
+
+    <!-- 模板对话框已移除，现在直接保存 -->
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, watch, nextTick, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useWatermarkStore } from '../stores/watermark'
 import { useAppStore } from '../stores/app'
+import { useRouter } from 'vue-router'
+import { ArrowDown, Collection, DocumentAdd } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const uploadedImages = ref([])
+
+// 模板相关变量（已简化为直接保存）
+
+// 计算属性：最近使用的模板
+const recentTemplates = computed(() => {
+  return appStore.templates.slice(0, 5) // 显示最近5个模板
+})
 
 // 选择单个或多个图片（支持多选）
 const selectSingleImages = async () => {
@@ -784,11 +815,31 @@ const getCurrentImage = () => {
 }
 
 // 组件挂载时初始化store并恢复状态
-onMounted(() => {
+onMounted(async () => {
   console.log('WatermarkEditor 组件挂载')
   
   // 初始化store
   watermarkStore.initStore()
+  
+  // 检查是否从模板管理页面应用模板返回
+  if (history.state && history.state.outputPath) {
+    console.log('从模板管理页面返回，恢复输出路径:', history.state.outputPath)
+    outputPath.value = history.state.outputPath
+    if (history.state.appliedTemplate) {
+      ElMessage.success(`已应用模板: ${history.state.appliedTemplate}，输出路径已恢复`)
+    }
+  }
+  
+  // 加载模板列表
+  try {
+    await appStore.loadTemplates()
+    console.log('模板列表加载完成')
+  } catch (error) {
+    console.warn('加载模板列表失败:', error)
+  }
+  
+  // 加载默认模板配置
+  await loadDefaultTemplate()
   
   // 输出当前状态
   console.log('恢复后的当前图片:', watermarkStore.currentImage)
@@ -1179,6 +1230,165 @@ const clearAll = () => {
   outputPath.value = ''
   ElMessage.success('已清除所有状态')
   console.log('用户手动清除所有状态')
+}
+
+// ==================== 模板管理相关方法 ====================
+
+// 显示模板管理页面
+const showTemplateManager = () => {
+  router.push('/templates')
+}
+
+// 直接保存当前配置为模板
+const showSaveTemplateDialog = async () => {
+  console.log('直接保存当前配置为模板')
+  
+  // 验证当前配置是否有效
+  if (watermarkConfig.type === 'TEXT' && !watermarkConfig.text?.trim()) {
+    ElMessage.warning('请先设置文本水印内容')
+    return
+  }
+  
+  if (watermarkConfig.type === 'IMAGE' && !watermarkConfig.imagePath) {
+    ElMessage.warning('请先选择水印图片')
+    return
+  }
+  
+  try {
+    // 生成默认模板名称（基于当前时间）
+    const now = new Date()
+    const defaultName = `水印模板_${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`
+    
+    // 颜色字符串转RGB值的辅助函数
+    const hexToRgb = (hex) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+      return result ? {
+        red: parseInt(result[1], 16),
+        green: parseInt(result[2], 16),
+        blue: parseInt(result[3], 16),
+        alpha: 255
+      } : { red: 255, green: 255, blue: 255, alpha: 255 }
+    }
+    
+    // 构建模板数据
+    const templateData = {
+      name: defaultName,
+      description: `自动保存的${watermarkConfig.type === 'TEXT' ? '文本' : '图片'}水印模板`,
+      config: {
+        // 基本配置
+        type: watermarkConfig.type,
+        position: watermarkConfig.position,
+        offsetX: watermarkConfig.offsetX || 0,
+        offsetY: watermarkConfig.offsetY || 0,
+        opacity: watermarkConfig.opacity || 0.8,
+        rotation: watermarkConfig.rotation || 0,
+        scale: watermarkConfig.scale || 1.0,
+        
+        // 输出路径配置
+        outputPath: outputPath.value || '',
+        
+        // 文本水印特有配置 - 将颜色转换为RGB对象
+        ...(watermarkConfig.type === 'TEXT' && {
+          text: watermarkConfig.text || '',
+          fontSize: watermarkConfig.fontSize || 24,
+          fontFamily: watermarkConfig.fontFamily || 'Microsoft YaHei',
+          color: hexToRgb(watermarkConfig.fontColor || '#FFFFFF'), // 转换为RGB对象
+          bold: watermarkConfig.bold || false,
+          italic: watermarkConfig.italic || false
+        }),
+        
+        // 图片水印特有配置 - 映射字段名到后端期望的名称
+        ...(watermarkConfig.type === 'IMAGE' && {
+          imagePath: watermarkConfig.imagePath || '',
+          width: watermarkConfig.watermarkWidth || 100, // watermarkWidth -> width
+          height: watermarkConfig.watermarkHeight || 100 // watermarkHeight -> height
+        })
+      }
+    }
+
+    console.log('保存模板数据:', templateData)
+    
+    // 检查后端API
+    if (!window.javaApi?.saveWatermarkTemplate) {
+      ElMessage.error('模板保存功能未就绪')
+      return
+    }
+
+    ElMessage.info('正在保存模板...')
+    
+    // 调用后端API保存模板
+    const result = await window.javaApi.saveWatermarkTemplate(JSON.stringify(templateData))
+    console.log('模板保存结果:', result)
+
+    // 处理保存结果
+    const response = typeof result === 'string' ? JSON.parse(result) : result
+    if (response.error) {
+      throw new Error(response.message || '保存失败')
+    }
+
+    ElMessage.success(`模板保存成功：${defaultName}`)
+
+    // 刷新模板列表
+    await appStore.loadTemplates()
+
+  } catch (error) {
+    console.error('保存模板失败:', error)
+    ElMessage.error('保存模板失败: ' + error.message)
+  }
+}
+
+// saveCurrentTemplate方法已合并到showSaveTemplateDialog中
+
+// 快速应用模板
+const handleQuickTemplate = (command) => {
+  if (command === 'manage') {
+    showTemplateManager()
+  } else if (command && command.config) {
+    // 应用选中的模板
+    watermarkStore.applyTemplate(command)
+    
+    // 恢复输出路径
+    const config = typeof command.config === 'string' 
+      ? JSON.parse(command.config) 
+      : command.config
+    if (config.outputPath) {
+      outputPath.value = config.outputPath
+      console.log('恢复输出路径:', config.outputPath)
+    }
+    
+    ElMessage.success(`已应用模板: ${command.name}`)
+  }
+}
+
+// 获取位置文本描述
+const getPositionText = (position) => {
+  const positionMap = {
+    'TOP_LEFT': '左上',
+    'TOP_CENTER': '上中',
+    'TOP_RIGHT': '右上',
+    'CENTER_LEFT': '左中',
+    'CENTER': '正中',
+    'CENTER_RIGHT': '右中',
+    'BOTTOM_LEFT': '左下',
+    'BOTTOM_CENTER': '下中',
+    'BOTTOM_RIGHT': '右下',
+    'CUSTOM': '自定义'
+  }
+  return positionMap[position] || position
+}
+
+// 初始化时加载默认模板
+const loadDefaultTemplate = async () => {
+  try {
+    const defaultTemplate = localStorage.getItem('defaultTemplate')
+    if (defaultTemplate) {
+      const config = JSON.parse(defaultTemplate)
+      watermarkStore.updateWatermarkConfig(config)
+      console.log('已加载默认模板配置')
+    }
+  } catch (error) {
+    console.warn('加载默认模板失败:', error)
+  }
 }
 </script>
 

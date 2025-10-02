@@ -51,6 +51,7 @@ public class PathManager {
         TEMP_DIR = APP_DATA_DIR + File.separator + "temp";
         LOGS_DIR = APP_DATA_DIR + File.separator + "logs";
         DATABASE_PATH = APP_DATA_DIR + File.separator + "watermark_app.db";
+        System.out.println("Database Path: " + DATABASE_PATH);
     }
     
     /**

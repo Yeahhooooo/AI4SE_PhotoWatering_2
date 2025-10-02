@@ -1,6 +1,7 @@
 package com.watermark.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.watermark.model.WatermarkTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,7 @@ public class TemplateService {
         this.databaseService = DatabaseService.getInstance();
         this.objectMapper = new ObjectMapper();
         this.objectMapper.findAndRegisterModules(); // 注册JSR310模块支持LocalDateTime
+        this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); // 忽略未知属性
     }
     
     public static synchronized TemplateService getInstance() {
@@ -56,7 +58,7 @@ public class TemplateService {
         }
         
         try (Connection conn = databaseService.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             // 将配置对象序列化为JSON
             String configJson = objectMapper.writeValueAsString(template.getConfig());
@@ -78,11 +80,12 @@ public class TemplateService {
                 throw new SQLException("保存模板失败，没有行被影响");
             }
             
-            // 如果是新增，获取生成的ID
+            // 如果是新增，使用SQLite特有的方式获取生成的ID
             if (!isUpdate) {
-                try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                    if (generatedKeys.next()) {
-                        template.setId(generatedKeys.getLong(1));
+                try (PreparedStatement lastIdStmt = conn.prepareStatement("SELECT last_insert_rowid()");
+                     ResultSet rs = lastIdStmt.executeQuery()) {
+                    if (rs.next()) {
+                        template.setId(rs.getLong(1));
                     } else {
                         throw new SQLException("保存模板失败，无法获取生成的ID");
                     }

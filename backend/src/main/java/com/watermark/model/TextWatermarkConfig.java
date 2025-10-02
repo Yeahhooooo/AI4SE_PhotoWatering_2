@@ -48,6 +48,7 @@ public class TextWatermarkConfig extends WatermarkConfig {
         copy.setOpacity(this.getOpacity());
         copy.setRotation(this.getRotation());
         copy.setScale(this.getScale());
+        copy.setOutputPath(this.getOutputPath());
         
         // 复制文本水印属性
         copy.text = this.text;
