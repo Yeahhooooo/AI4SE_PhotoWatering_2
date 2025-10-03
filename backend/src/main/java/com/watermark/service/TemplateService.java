@@ -2,6 +2,7 @@ package com.watermark.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.watermark.model.TextWatermarkConfig;
 import com.watermark.model.WatermarkTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,8 @@ public class TemplateService {
             
             // 将配置对象序列化为JSON
             String configJson = objectMapper.writeValueAsString(template.getConfig());
+
+            System.out.println("Serialized config JSON: " + configJson);
             
             stmt.setString(1, template.getName());
             stmt.setString(2, template.getDescription());
@@ -141,7 +144,7 @@ public class TemplateService {
                 templates.add(mapResultSetToTemplate(rs));
             }
             
-            logger.debug("获取到 {} 个模板", templates.size());
+            logger.debug("获取到 {} 个模板",((TextWatermarkConfig) templates.get(0).getConfig()).getColor());
             return templates;
             
         } catch (Exception e) {

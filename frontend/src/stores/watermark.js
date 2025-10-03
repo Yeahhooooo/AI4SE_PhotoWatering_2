@@ -119,6 +119,14 @@ export const useWatermarkStore = defineStore('watermark', () => {
       const config = typeof template.config === 'string' 
         ? JSON.parse(template.config) 
         : template.config
+      
+      // 字段映射：将后端的 color 字段映射为前端的 fontColor 字段
+      if (config.color && !config.fontColor) {
+        config.fontColor = config.color
+        delete config.color // 可选：删除原字段避免混淆
+      }
+      
+      console.log('应用模板配置（映射后）:', config)
       updateWatermarkConfig(config)
       currentTemplate.value = template
     }

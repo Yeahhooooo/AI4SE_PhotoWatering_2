@@ -1,5 +1,10 @@
 package com.watermark.model;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.watermark.util.ColorDeserializer;
+import com.watermark.util.ColorSerializer;
+
 import java.awt.*;
 
 /**
@@ -15,16 +20,26 @@ public class TextWatermarkConfig extends WatermarkConfig {
     private int fontSize = 36;             // 字体大小
     private boolean bold = false;          // 粗体
     private boolean italic = false;        // 斜体
+    
+    @JsonSerialize(using = ColorSerializer.class)
+    @JsonDeserialize(using = ColorDeserializer.class)
     private Color color = Color.WHITE;     // 字体颜色
     
     // 高级样式选项
     private boolean hasShadow = true;      // 是否有阴影
+    
+    @JsonSerialize(using = ColorSerializer.class)
+    @JsonDeserialize(using = ColorDeserializer.class)
     private Color shadowColor = Color.BLACK; // 阴影颜色
+    
     private int shadowOffsetX = 2;         // 阴影X偏移
     private int shadowOffsetY = 2;         // 阴影Y偏移
     private int shadowBlur = 3;            // 阴影模糊度
     
     private boolean hasStroke = false;     // 是否有描边
+    
+    @JsonSerialize(using = ColorSerializer.class)
+    @JsonDeserialize(using = ColorDeserializer.class)
     private Color strokeColor = Color.BLACK; // 描边颜色
     private int strokeWidth = 1;           // 描边宽度
     

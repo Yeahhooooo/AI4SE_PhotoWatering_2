@@ -36,25 +36,27 @@
             {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240">
+        <el-table-column label="操作" width="280">
           <template #default="scope">
-            <el-button-group size="small">
-              <el-button type="primary" @click="applyTemplate(scope.row)" icon="Check">应用</el-button>
-              <el-button @click="showEditDialog(scope.row)" icon="Edit">编辑</el-button>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-button type="primary" @click="applyTemplate(scope.row)" icon="Check" size="small">应用</el-button>
+              <el-button @click="handleEditClick(scope.row)" icon="Edit" size="small">编辑</el-button>
               <el-button 
                 type="success" 
                 v-if="!isDefaultTemplate(scope.row)"
                 @click="setDefaultTemplate(scope.row)"
                 icon="Star"
+                size="small"
               >设为默认</el-button>
               <el-button 
                 type="info" 
                 v-else
                 @click="unsetDefaultTemplate()"
                 icon="StarFilled"
+                size="small"
               >取消默认</el-button>
-              <el-button type="danger" @click="deleteTemplate(scope.row)" icon="Delete">删除</el-button>
-            </el-button-group>
+              <el-button type="danger" @click="deleteTemplate(scope.row)" icon="Delete" size="small">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -63,93 +65,146 @@
       <el-empty v-if="!appStore.loading && appStore.templates.length === 0" description="暂无模板">
         <el-button type="primary" @click="showCreateDialog">创建第一个模板</el-button>
       </el-empty>
-    </el-card>
-
-    <!-- 新建/编辑模板对话框 -->
-    <el-dialog 
-      v-model="dialogVisible" 
-      :title="isEdit ? '编辑模板' : '新建模板'" 
-      width="600px"
-      :modal="true"
-      :append-to-body="true"
-      :destroy-on-close="false"
-      center
-      @close="resetForm"
-    >
-      <el-form :model="templateForm" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="模板名称" prop="name">
-          <el-input v-model="templateForm.name" placeholder="请输入模板名称" />
-        </el-form-item>
-        <el-form-item label="模板描述">
-          <el-input 
-            v-model="templateForm.description" 
-            type="textarea" 
-            rows="3" 
-            placeholder="请输入模板描述（可选）" 
-          />
-        </el-form-item>
-        <el-form-item label="水印类型" prop="type">
-          <el-radio-group v-model="templateForm.type" @change="onTypeChange">
-            <el-radio label="TEXT">文本水印</el-radio>
-            <el-radio label="IMAGE">图片水印</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        
-        <!-- 文本水印配置 -->
-        <template v-if="templateForm.type === 'TEXT'">
-          <el-form-item label="文本内容" prop="text">
-            <el-input v-model="templateForm.text" placeholder="请输入水印文本" />
-          </el-form-item>
-          <el-form-item label="字体大小">
-            <el-input-number v-model="templateForm.fontSize" :min="12" :max="200" />
-          </el-form-item>
-          <el-form-item label="字体颜色">
-            <el-color-picker v-model="templateForm.fontColor" />
-          </el-form-item>
+      
+      <!-- 编辑模板表单 - 使用卡片形式替代对话框 -->
+      <el-card v-if="isEdit" shadow="hover" style="margin-top: 20px;" class="edit-card">
+        <template #header>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>{{ currentTemplate ? '编辑模板' : '新建模板' }}</span>
+            <el-button @click="cancelEdit" icon="Close" size="small">取消</el-button>
+          </div>
         </template>
         
-        <!-- 图片水印配置 -->
-        <template v-if="templateForm.type === 'IMAGE'">
-          <el-form-item label="图片路径" prop="imagePath">
-            <el-input v-model="templateForm.imagePath" placeholder="请选择水印图片">
+        <el-form :model="templateForm" :rules="rules" ref="formRef" label-width="100px">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="模板名称" prop="name">
+                <el-input v-model="templateForm.name" placeholder="请输入模板名称" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="水印类型" prop="type">
+                <el-radio-group v-model="templateForm.type" @change="onTypeChange">
+                  <el-radio label="TEXT">文本水印</el-radio>
+                  <el-radio label="IMAGE">图片水印</el-radio>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          
+          <el-form-item label="模板描述">
+            <el-input 
+              v-model="templateForm.description" 
+              type="textarea" 
+              rows="2" 
+              placeholder="请输入模板描述（可选）" 
+            />
+          </el-form-item>
+          
+          <!-- 文本水印配置 -->
+          <template v-if="templateForm.type === 'TEXT'">
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <el-form-item label="文本内容" prop="text">
+                  <el-input v-model="templateForm.text" placeholder="请输入水印文本" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="字体大小">
+                  <el-input-number v-model="templateForm.fontSize" :min="12" :max="200" style="width: 100%;" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="字体颜色">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <el-color-picker 
+                      v-model="templateForm.fontColor" 
+                      @change="onColorChange"
+                      :predefine="colorPresets"
+                      size="default"
+                      :teleported="false"
+                      :disabled="false"
+                      :validate-event="false"
+                      color-format="hex"
+                    />
+                    <el-input 
+                      v-model="templateForm.fontColor" 
+                      placeholder="#FFFFFF"
+                      style="width: 100px;"
+                      @input="onColorInputChange"
+                      @change="onColorInputChange"
+                    />
+                  </div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </template>
+          
+          <!-- 图片水印配置 -->
+          <template v-if="templateForm.type === 'IMAGE'">
+            <el-form-item label="图片路径" prop="imagePath">
+              <el-input v-model="templateForm.imagePath" placeholder="请选择水印图片">
+                <template #append>
+                  <el-button @click="selectWatermarkImage">选择图片</el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+          </template>
+          
+          <!-- 输出路径配置 -->
+          <el-form-item label="输出路径">
+            <el-input 
+              v-model="templateForm.outputPath" 
+              placeholder="请选择输出目录（可选）"
+              :key="templateForm.outputPath"
+            >
               <template #append>
-                <el-button @click="selectWatermarkImage">选择图片</el-button>
+                <el-button @click="selectOutputPath">选择目录</el-button>
               </template>
             </el-input>
+            <div style="margin-top: 5px;">
+              <el-text type="info" size="small">不选择则使用默认输出路径</el-text>
+            </div>
           </el-form-item>
-        </template>
-        
-        <!-- 通用配置 -->
-        <el-form-item label="位置">
-          <el-select v-model="templateForm.position" style="width: 200px;">
-            <el-option label="左上" value="TOP_LEFT" />
-            <el-option label="上中" value="TOP_CENTER" />
-            <el-option label="右上" value="TOP_RIGHT" />
-            <el-option label="左中" value="CENTER_LEFT" />
-            <el-option label="正中" value="CENTER" />
-            <el-option label="右中" value="CENTER_RIGHT" />
-            <el-option label="左下" value="BOTTOM_LEFT" />
-            <el-option label="下中" value="BOTTOM_CENTER" />
-            <el-option label="右下" value="BOTTOM_RIGHT" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="透明度">
-          <el-slider v-model="templateForm.opacity" :min="0" :max="1" :step="0.1" style="width: 200px;" />
-          <span style="margin-left: 10px;">{{ Math.round(templateForm.opacity * 100) }}%</span>
-        </el-form-item>
-        <el-form-item label="设为默认">
-          <el-switch v-model="templateForm.isDefault" />
-          <el-text type="info" size="small" style="margin-left: 10px;">启动时自动应用此模板</el-text>
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveTemplate">{{ isEdit ? '更新' : '保存' }}</el-button>
-        </span>
-      </template>
-    </el-dialog>
+          
+          <!-- 通用配置 -->
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="位置">
+                <el-select v-model="templateForm.position" style="width: 100%;">
+                  <el-option label="左上" value="TOP_LEFT" />
+                  <el-option label="上中" value="TOP_CENTER" />
+                  <el-option label="右上" value="TOP_RIGHT" />
+                  <el-option label="左中" value="CENTER_LEFT" />
+                  <el-option label="正中" value="CENTER" />
+                  <el-option label="右中" value="CENTER_RIGHT" />
+                  <el-option label="左下" value="BOTTOM_LEFT" />
+                  <el-option label="下中" value="BOTTOM_CENTER" />
+                  <el-option label="右下" value="BOTTOM_RIGHT" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="透明度">
+                <el-slider v-model="templateForm.opacity" :min="0" :max="1" :step="0.1" />
+                <span style="margin-left: 10px;">{{ Math.round(templateForm.opacity * 100) }}%</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="设为默认">
+                <el-switch v-model="templateForm.isDefault" />
+                <el-text type="info" size="small" style="margin-left: 10px;">启动时自动应用</el-text>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          
+          <div style="text-align: right; margin-top: 20px;">
+            <el-button @click="cancelEdit">取消</el-button>
+            <el-button type="primary" @click="saveTemplate">{{ currentTemplate ? '更新模板' : '保存模板' }}</el-button>
+          </div>
+        </el-form>
+      </el-card>
+    </el-card>
 
   </div>
 </template>
@@ -173,6 +228,20 @@ const currentTemplate = ref(null)
 // 表单引用
 const formRef = ref(null)
 
+// 颜色预设
+const colorPresets = [
+  '#ffffff',
+  '#000000',
+  '#ff0000',
+  '#00ff00',
+  '#0000ff',
+  '#ffff00',
+  '#ff00ff',
+  '#00ffff',
+  '#808080',
+  '#ffa500'
+]
+
 // 模板表单
 const templateForm = reactive({
   name: '',
@@ -182,6 +251,7 @@ const templateForm = reactive({
   fontSize: 24,
   fontColor: '#FFFFFF',
   imagePath: '',
+  outputPath: '',
   position: 'BOTTOM_RIGHT',
   opacity: 0.8,
   isDefault: false
@@ -225,13 +295,7 @@ function validateImagePath(rule, value, callback) {
 
 onMounted(async () => {
   console.log('TemplateManager 组件挂载')
-  console.log('当前appStore.templates:', appStore.templates)
-  console.log('JavaAPI可用性:', !!window.javaApi)
-  console.log('getAllTemplates方法可用性:', typeof window.javaApi?.getAllTemplates)
-  
   await loadTemplates()
-  
-  console.log('挂载完成后的模板数量:', appStore.templates.length)
 })
 
 // ==================== 模板操作方法 ====================
@@ -240,45 +304,127 @@ onMounted(async () => {
 const loadTemplates = async () => {
   try {
     await appStore.loadTemplates()
-    console.log('模板列表加载完成:', appStore.templates)
   } catch (error) {
-    console.error('加载模板列表失败:', error)
     ElMessage.error('加载模板列表失败')
   }
 }
 
 // 手动刷新模板列表
 const refreshTemplates = async () => {
-  console.log('手动刷新模板列表...')
   await loadTemplates()
-  ElMessage.success('模板列表已刷新')
 }
 
 // 显示新建对话框
 const showCreateDialog = () => {
   isEdit.value = false
+  currentTemplate.value = null
   resetForm()
-  dialogVisible.value = true
+  // 使用内联编辑形式，不再使用对话框
+  isEdit.value = true
+}
+
+// 处理编辑按钮点击 - 添加错误捕获
+const handleEditClick = (template) => {
+  console.log('编辑按钮被点击，模板:', template)
+  try {
+    showEditDialog(template)
+  } catch (error) {
+    console.error('编辑按钮点击处理失败:', error)
+    ElMessage.error('打开编辑对话框失败: ' + error.message)
+  }
 }
 
 // 显示编辑对话框
-const showEditDialog = (template) => {
-  isEdit.value = true
-  currentTemplate.value = template
+const showEditDialog = async (template) => {
+  console.log('showEditDialog 被调用，模板数据:', template)
   
-  // 填充表单数据
-  templateForm.name = template.name
-  templateForm.description = template.description || ''
-  templateForm.type = template.config?.type || 'TEXT'
-  templateForm.text = template.config?.text || '水印文本'
-  templateForm.fontSize = template.config?.fontSize || 24
-  templateForm.fontColor = template.config?.fontColor || '#FFFFFF'
-  templateForm.imagePath = template.config?.imagePath || ''
-  templateForm.position = template.config?.position || 'BOTTOM_RIGHT'
-  templateForm.opacity = template.config?.opacity || 0.8
-  templateForm.isDefault = isDefaultTemplate(template)
-  
-  dialogVisible.value = true
+  try {
+    isEdit.value = true
+    currentTemplate.value = template
+    
+    console.log('设置编辑状态成功')
+    
+    // 解析配置数据
+    let config = template.config
+    if (typeof config === 'string') {
+      try {
+        config = JSON.parse(config)
+        console.log('解析后的配置:', config)
+      } catch (e) {
+        console.error('解析模板配置失败:', e)
+        config = {}
+      }
+    } else if (!config) {
+      config = {}
+    }
+    
+    // 填充表单数据
+    templateForm.name = template.name || ''
+    templateForm.description = template.description || ''
+    templateForm.type = config.type || 'TEXT'
+    templateForm.text = config.text || '水印文本'
+    templateForm.fontSize = config.fontSize || 24
+    
+    // 处理颜色格式 - 如果是RGB对象则转换为hex
+    let fontColor = '#FFFFFF'
+    if (config.fontColor) {
+      if (typeof config.fontColor === 'string') {
+        // 确保颜色值是有效的hex格式
+        if (config.fontColor.startsWith('#')) {
+          fontColor = config.fontColor
+        } else {
+          fontColor = '#' + config.fontColor
+        }
+      } else if (config.fontColor && typeof config.fontColor === 'object') {
+        // 处理RGB对象格式
+        const { red, green, blue } = config.fontColor
+        fontColor = `#${red.toString(16).padStart(2, '0')}${green.toString(16).padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`
+      }
+      // 验证颜色格式
+      if (!/^#[0-9A-Fa-f]{6}$/.test(fontColor)) {
+        console.warn('颜色格式无效，使用默认颜色:', fontColor)
+        fontColor = '#FFFFFF'
+      }
+    } else if (config.color) {
+      // 处理后端 Color 对象格式
+      if (typeof config.color === 'object' && config.color.red !== undefined) {
+        const { red, green, blue } = config.color
+        fontColor = `#${red.toString(16).padStart(2, '0')}${green.toString(16).padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`
+      } else if (typeof config.color === 'string') {
+        fontColor = config.color.startsWith('#') ? config.color : '#' + config.color
+      }
+    }
+    templateForm.fontColor = fontColor
+    console.log('设置的字体颜色:', fontColor)
+    
+    templateForm.imagePath = config.imagePath || ''
+    templateForm.outputPath = config.outputPath || ''
+    templateForm.position = config.position || 'BOTTOM_RIGHT'
+    templateForm.opacity = config.opacity || 0.8
+    templateForm.isDefault = isDefaultTemplate(template)
+    
+    console.log('填充后的表单数据:', templateForm)
+    
+    // 强制触发响应式更新
+    dialogVisible.value = false
+    await new Promise(resolve => setTimeout(resolve, 50)) // 短暂延迟
+    dialogVisible.value = true
+    
+    console.log('对话框显示状态:', dialogVisible.value)
+    
+    // 检查DOM中是否存在对话框元素
+    setTimeout(() => {
+      const dialogElement = document.querySelector('.el-dialog')
+      console.log('对话框DOM元素:', dialogElement)
+      if (dialogElement) {
+        console.log('对话框样式:', window.getComputedStyle(dialogElement))
+      }
+    }, 100)
+    
+  } catch (error) {
+    console.error('显示编辑对话框失败:', error)
+    ElMessage.error('打开编辑对话框失败: ' + error.message)
+  }
 }
 
 // 重置表单
@@ -290,6 +436,7 @@ const resetForm = () => {
   templateForm.fontSize = 24
   templateForm.fontColor = '#FFFFFF'
   templateForm.imagePath = ''
+  templateForm.outputPath = ''
   templateForm.position = 'BOTTOM_RIGHT'
   templateForm.opacity = 0.8
   templateForm.isDefault = false
@@ -309,6 +456,53 @@ const onTypeChange = (type) => {
   }
 }
 
+// 颜色变化处理
+const onColorChange = (color) => {
+  ElMessage.success(`颜色选择器变化: ${color}`)
+  console.log('onColorChange 被调用:', color)
+  if (color) {
+    let finalColor = color
+    
+    // 处理8位颜色值（带透明度）转换为6位颜色值
+    if (/^#[0-9A-Fa-f]{8}$/.test(finalColor)) {
+      // 如果是8位颜色值，去掉透明度部分（最后两位）
+      finalColor = finalColor.substring(0, 7)
+      ElMessage.info(`检测到8位颜色值，已转换为6位: ${finalColor}`)
+    }
+    
+    templateForm.fontColor = finalColor
+    ElMessage.success(`更新后的颜色: ${templateForm.fontColor}`)
+    console.log('颜色已更新:', templateForm.fontColor)
+  } else {
+    ElMessage.warning('颜色值为空')
+  }
+}
+
+// 颜色输入框变化处理
+const onColorInputChange = (color) => {
+  ElMessage.success(`颜色输入框变化: ${color}`)
+  console.log('onColorInputChange 被调用:', color)
+  if (color) {
+    let finalColor = color
+    
+    // 处理8位颜色值（带透明度）转换为6位颜色值
+    if (/^#[0-9A-Fa-f]{8}$/.test(finalColor)) {
+      // 如果是8位颜色值，去掉透明度部分（最后两位）
+      finalColor = finalColor.substring(0, 7)
+      ElMessage.info(`检测到8位颜色值，已转换为6位: ${finalColor}`)
+    }
+    
+    // 验证6位颜色格式
+    if (/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
+      templateForm.fontColor = finalColor
+      ElMessage.success(`颜色格式有效，更新: ${templateForm.fontColor}`)
+      console.log('颜色格式有效，更新:', templateForm.fontColor)
+    } else {
+      ElMessage.warning(`颜色格式无效: ${color}`)
+    }
+  }
+}
+
 // 选择水印图片
 const selectWatermarkImage = async () => {
   try {
@@ -322,6 +516,28 @@ const selectWatermarkImage = async () => {
     ElMessage.error('选择图片失败')
   }
 }
+
+// 选择输出路径
+const selectOutputPath = async () => {
+  console.log('selectOutputPath 被调用')
+  console.log('当前 templateForm.outputPath:', templateForm.outputPath)
+  console.log('window.javaApi 可用性:', !!window.javaApi)
+  console.log('selectDirectory 方法可用性:', typeof window.javaApi?.selectDirectory)
+  
+  try {
+    const result = await window.javaApi.selectDirectory()
+  
+    // selectDirectory 直接返回路径字符串或 null
+    if (result && result !== 'null' && result.trim() !== '') {
+      templateForm.outputPath = result.trim()
+    } else {
+      ElMessage.info('未选择目录')
+    }
+  } catch (error) {
+    ElMessage.error('选择输出路径失败: ' + (error.message || error))
+  }
+}
+
 
 // 保存模板
 const saveTemplate = async () => {
@@ -342,14 +558,41 @@ const saveTemplate = async () => {
       scale: 1.0
     }
     
+    // 添加输出路径（如果设置了）
+    if (templateForm.outputPath && templateForm.outputPath.trim()) {
+      config.outputPath = templateForm.outputPath.trim()
+    }
+    
     if (templateForm.type === 'TEXT') {
+      // 确保颜色值格式正确
+      let finalColor = templateForm.fontColor
+
+      if (!finalColor.startsWith('#')) {
+        finalColor = '#' + finalColor
+      }
+      
+      // 处理8位颜色值（带透明度）转换为6位颜色值
+      if (/^#[0-9A-Fa-f]{8}$/.test(finalColor)) {
+        // 如果是8位颜色值，去掉透明度部分（最后两位）
+        finalColor = finalColor.substring(0, 7)
+        ElMessage.success(`检测到8位颜色值，已转换为6位: ${finalColor}`)
+      }
+      
+      // 验证颜色格式（支持6位颜色值）
+      if (!/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
+        ElMessage.error(`颜色格式无效，使用默认颜色: ${finalColor}`)
+        finalColor = '#FFFFFF'
+      } else {
+        ElMessage.success(`颜色格式有效: ${finalColor}`)
+      }
       Object.assign(config, {
         text: templateForm.text,
         fontSize: templateForm.fontSize,
         fontFamily: 'Microsoft YaHei',
-        fontColor: templateForm.fontColor,
+        color: finalColor,  // 改为 color 以匹配后端字段
         fontStyle: 'NORMAL'
       })
+      console.log('保存的字体颜色:', finalColor)
     } else {
       Object.assign(config, {
         imagePath: templateForm.imagePath
@@ -380,8 +623,9 @@ const saveTemplate = async () => {
       throw new Error(response.message || '保存失败')
     }
     
-    ElMessage.success(isEdit.value ? '模板更新成功' : '模板保存成功')
-    dialogVisible.value = false
+    ElMessage.success(currentTemplate.value ? '模板更新成功' : '模板保存成功')
+    isEdit.value = false
+    currentTemplate.value = null
     
     // 刷新模板列表
     await loadTemplates()
@@ -513,6 +757,14 @@ const isDefaultTemplate = (template) => {
   return defaultTemplateId && defaultTemplateId === template.id?.toString()
 }
 
+// 取消编辑
+const cancelEdit = () => {
+  isEdit.value = false
+  currentTemplate.value = null
+  resetForm()
+  ElMessage.info('已取消编辑')
+}
+
 // 返回上一页
 const goBack = () => {
   router.go(-1)
@@ -586,6 +838,11 @@ const getPositionText = (position) => {
   margin: 0;
   font-size: 12px;
   padding: 4px 8px;
+  pointer-events: auto; /* 确保按钮可以接收点击事件 */
+}
+
+.el-table .el-button {
+  pointer-events: auto !important; /* 强制启用点击事件 */
 }
 
 .dialog-footer {
@@ -595,12 +852,36 @@ const getPositionText = (position) => {
 }
 
 /* 对话框样式优化 */
-.el-dialog {
-  margin-top: 8vh !important;
+:deep(.el-dialog) {
+  margin-top: 5vh !important;
+  z-index: 3000 !important;
+}
+
+:deep(.el-dialog__wrapper) {
+  z-index: 3000 !important;
+}
+
+:deep(.el-overlay) {
+  z-index: 2999 !important;
 }
 
 .el-dialog__body {
   max-height: 60vh;
   overflow-y: auto;
+}
+
+/* 确保对话框可见 */
+:deep(.el-dialog__header) {
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+:deep(.el-dialog__body) {
+  padding: 20px;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 10px 20px 20px;
+  text-align: right;
 }
 </style>

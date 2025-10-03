@@ -34,10 +34,10 @@
             <span>模板管理</span>
           </el-menu-item>
           
-          <el-menu-item index="history">
+          <!-- <el-menu-item index="history">
             <el-icon><Clock /></el-icon>
             <span>处理历史</span>
-          </el-menu-item>
+          </el-menu-item> -->
           
           <el-menu-item index="settings">
             <el-icon><Setting /></el-icon>

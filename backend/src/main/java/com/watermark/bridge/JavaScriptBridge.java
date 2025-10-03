@@ -379,6 +379,11 @@ public class JavaScriptBridge {
         logger.info("保存水印模板被调用，参数: {}", templateJson);
         
         try {
+            // 首先解析JSON字符串来查看前端发送的数据
+            com.fasterxml.jackson.databind.JsonNode jsonNode = objectMapper.readTree(templateJson);
+            // 查看颜色相关字段
+            com.fasterxml.jackson.databind.JsonNode configNode = jsonNode.get("config");
+            
             WatermarkTemplate template = objectMapper.readValue(templateJson, WatermarkTemplate.class);
             WatermarkTemplate savedTemplate = templateService.saveTemplate(template);
             
