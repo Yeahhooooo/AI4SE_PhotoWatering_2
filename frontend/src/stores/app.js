@@ -18,9 +18,6 @@ export const useAppStore = defineStore('app', () => {
   // 模板列表
   const templates = ref([])
   
-  // 处理历史
-  const history = ref([])
-  
   // JavaFX API实例
   const javaApi = ref(null)
   
@@ -142,7 +139,6 @@ export const useAppStore = defineStore('app', () => {
     processing,
     settings,
     templates,
-    history,
     javaApi,
     // 方法
     setLoading,
@@ -150,7 +146,6 @@ export const useAppStore = defineStore('app', () => {
     updateSettings,
     setJavaApi,
     loadTemplates,
-    loadHistory,
     loadSettings,
     saveSettings
   }
