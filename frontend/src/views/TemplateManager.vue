@@ -148,6 +148,10 @@
                   <el-button @click="selectWatermarkImage">选择图片</el-button>
                 </template>
               </el-input>
+              <!-- 图片预览 -->
+              <div v-if="templateForm.imagePath" class="image-preview" style="margin-top: 10px;">
+                <img :src="toFileUrl(templateForm.imagePath)" alt="水印图片预览" style="max-width: 200px; max-height: 150px; border: 1px solid #ddd; border-radius: 4px;" />
+              </div>
             </el-form-item>
           </template>
           
@@ -458,7 +462,6 @@ const onTypeChange = (type) => {
 
 // 颜色变化处理
 const onColorChange = (color) => {
-  ElMessage.success(`颜色选择器变化: ${color}`)
   console.log('onColorChange 被调用:', color)
   if (color) {
     let finalColor = color
@@ -467,11 +470,9 @@ const onColorChange = (color) => {
     if (/^#[0-9A-Fa-f]{8}$/.test(finalColor)) {
       // 如果是8位颜色值，去掉透明度部分（最后两位）
       finalColor = finalColor.substring(0, 7)
-      ElMessage.info(`检测到8位颜色值，已转换为6位: ${finalColor}`)
     }
     
     templateForm.fontColor = finalColor
-    ElMessage.success(`更新后的颜色: ${templateForm.fontColor}`)
     console.log('颜色已更新:', templateForm.fontColor)
   } else {
     ElMessage.warning('颜色值为空')
@@ -480,8 +481,6 @@ const onColorChange = (color) => {
 
 // 颜色输入框变化处理
 const onColorInputChange = (color) => {
-  ElMessage.success(`颜色输入框变化: ${color}`)
-  console.log('onColorInputChange 被调用:', color)
   if (color) {
     let finalColor = color
     
@@ -489,14 +488,11 @@ const onColorInputChange = (color) => {
     if (/^#[0-9A-Fa-f]{8}$/.test(finalColor)) {
       // 如果是8位颜色值，去掉透明度部分（最后两位）
       finalColor = finalColor.substring(0, 7)
-      ElMessage.info(`检测到8位颜色值，已转换为6位: ${finalColor}`)
     }
     
     // 验证6位颜色格式
     if (/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
       templateForm.fontColor = finalColor
-      ElMessage.success(`颜色格式有效，更新: ${templateForm.fontColor}`)
-      console.log('颜色格式有效，更新:', templateForm.fontColor)
     } else {
       ElMessage.warning(`颜色格式无效: ${color}`)
     }
@@ -506,14 +502,28 @@ const onColorInputChange = (color) => {
 // 选择水印图片
 const selectWatermarkImage = async () => {
   try {
-    const result = await window.javaApi.selectSingleFile()
-    if (result && result.path) {
-      templateForm.imagePath = result.path
+    console.log('开始选择水印图片...')
+    console.log('window.javaApi:', window.javaApi)
+    console.log('selectImage方法存在:', typeof window.javaApi?.selectImage === 'function')
+    
+    if (!window.javaApi?.selectImage) {
+      ElMessage.error('图片选择功能未就绪')
+      return
+    }
+    
+    const imagePath = await window.javaApi.selectImage()
+    console.log('选择的图片路径:', imagePath)
+    
+    if (imagePath && imagePath !== 'null' && imagePath.trim() !== '') {
+      templateForm.imagePath = imagePath.trim()
       ElMessage.success('图片选择成功')
+      console.log('图片路径已设置:', templateForm.imagePath)
+    } else {
+      ElMessage.info('未选择图片')
     }
   } catch (error) {
     console.error('选择图片失败:', error)
-    ElMessage.error('选择图片失败')
+    ElMessage.error('选择图片失败: ' + (error.message || error.toString()))
   }
 }
 
@@ -536,6 +546,14 @@ const selectOutputPath = async () => {
   } catch (error) {
     ElMessage.error('选择输出路径失败: ' + (error.message || error))
   }
+}
+
+// 文件路径转换为URL（用于图片预览）
+const toFileUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('file://')) return path
+  const norm = path.replace(/\\/g, '/').replace(/^([A-Za-z]):\//, '/$1:/')
+  return `file:///${norm.replace(/^\/+/, '')}`
 }
 
 
@@ -575,15 +593,12 @@ const saveTemplate = async () => {
       if (/^#[0-9A-Fa-f]{8}$/.test(finalColor)) {
         // 如果是8位颜色值，去掉透明度部分（最后两位）
         finalColor = finalColor.substring(0, 7)
-        ElMessage.success(`检测到8位颜色值，已转换为6位: ${finalColor}`)
       }
       
       // 验证颜色格式（支持6位颜色值）
       if (!/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
         ElMessage.error(`颜色格式无效，使用默认颜色: ${finalColor}`)
         finalColor = '#FFFFFF'
-      } else {
-        ElMessage.success(`颜色格式有效: ${finalColor}`)
       }
       Object.assign(config, {
         text: templateForm.text,
@@ -592,7 +607,6 @@ const saveTemplate = async () => {
         color: finalColor,  // 改为 color 以匹配后端字段
         fontStyle: 'NORMAL'
       })
-      console.log('保存的字体颜色:', finalColor)
     } else {
       Object.assign(config, {
         imagePath: templateForm.imagePath

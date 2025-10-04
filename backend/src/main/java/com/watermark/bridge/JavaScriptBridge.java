@@ -99,6 +99,77 @@ public class JavaScriptBridge {
     }
     
     /**
+     * 通过文件路径选择图片（拖拽功能）
+     * 复现选择图片按钮的逻辑，根据传入的文件路径创建图片信息
+     * @param filePath 图片文件的绝对路径
+     * @return 图片信息的JSON字符串
+     */
+    public String selectImageByPath(String filePath) {
+        try {
+            logger.info("通过路径选择图片: {}", filePath);
+            
+            if (filePath == null || filePath.trim().isEmpty()) {
+                throw new IllegalArgumentException("文件路径不能为空");
+            }
+            
+            // 验证文件存在性和格式
+            File file = new File(filePath.trim());
+            if (!file.exists()) {
+                throw new IllegalArgumentException("文件不存在: " + filePath);
+            }
+            
+            if (!file.isFile()) {
+                throw new IllegalArgumentException("不是有效的文件: " + filePath);
+            }
+            
+            // 验证图片格式
+            String fileName = file.getName().toLowerCase();
+            if (!fileName.matches(".*\\.(jpg|jpeg|png|bmp|tiff)$")) {
+                throw new IllegalArgumentException("不支持的图片格式，仅支持 JPG、JPEG、PNG、BMP、TIFF");
+            }
+            
+            // 验证文件大小（10MB限制）
+            long maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.length() > maxSize) {
+                throw new IllegalArgumentException("文件大小超过限制（10MB）");
+            }
+            
+            // 创建图片信息对象（复现选择图片按钮的逻辑）
+            ImageInfo imageInfo = new ImageInfo();
+            imageInfo.setFilePath(file.getAbsolutePath());
+            imageInfo.setFileName(file.getName());
+            imageInfo.setFileSize(file.length());
+            
+            // 尝试获取图片尺寸信息
+            try {
+                java.awt.image.BufferedImage bufferedImage = javax.imageio.ImageIO.read(file);
+                if (bufferedImage != null) {
+                    imageInfo.setWidth(bufferedImage.getWidth());
+                    imageInfo.setHeight(bufferedImage.getHeight());
+                    
+                    // 检测图片格式
+                    String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toUpperCase();
+                    imageInfo.setFormat(extension);
+                    
+                    // 检测是否有透明通道
+                    imageInfo.setHasAlphaChannel(bufferedImage.getColorModel().hasAlpha());
+                }
+            } catch (Exception e) {
+                logger.warn("无法读取图片尺寸信息: {}", e.getMessage());
+            }
+            
+            logger.info("成功创建图片信息: {}", imageInfo.getFileName());
+            
+            // 返回JSON格式的图片信息
+            return objectMapper.writeValueAsString(imageInfo);
+            
+        } catch (Exception e) {
+            logger.error("通过路径选择图片失败: {}", e.getMessage(), e);
+            return createErrorResponse("选择图片失败: " + e.getMessage());
+        }
+    }
+    
+    /**
      * 选择输出目录 (前端兼容性方法)
      */
     public String selectDirectory() {
@@ -263,6 +334,70 @@ public class JavaScriptBridge {
         } catch (Exception e) {
             logger.error("选择多个图片文件失败", e);
             return createErrorResponse("选择文件失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 保存临时图片文件（用于拖拽功能）
+     * @param base64Data Base64编码的图片数据（包含data:image/...;base64,前缀）
+     * @param fileName 原始文件名
+     * @return 临时文件的绝对路径
+     */
+    public String saveTempImageFile(String base64Data, String fileName) {
+        try {
+            logger.info("保存临时图片文件: {}", fileName);
+            
+            if (base64Data == null || base64Data.isEmpty()) {
+                throw new IllegalArgumentException("Base64数据为空");
+            }
+            
+            // 解析Base64数据
+            String actualBase64Data;
+            if (base64Data.startsWith("data:")) {
+                // 移除data:image/...;base64,前缀
+                int commaIndex = base64Data.indexOf(',');
+                if (commaIndex != -1) {
+                    actualBase64Data = base64Data.substring(commaIndex + 1);
+                } else {
+                    throw new IllegalArgumentException("无效的Base64数据格式");
+                }
+            } else {
+                actualBase64Data = base64Data;
+            }
+            
+            // 解码Base64数据
+            byte[] imageBytes = java.util.Base64.getDecoder().decode(actualBase64Data);
+            
+            // 创建临时目录
+            String tempDir = System.getProperty("java.io.tmpdir");
+            File tempDirFile = new File(tempDir, "watermark_temp");
+            if (!tempDirFile.exists()) {
+                tempDirFile.mkdirs();
+            }
+            
+            // 生成临时文件名（保持原始扩展名）
+            String fileExtension = "";
+            int dotIndex = fileName.lastIndexOf('.');
+            if (dotIndex > 0) {
+                fileExtension = fileName.substring(dotIndex);
+            }
+            
+            String tempFileName = "drag_" + System.currentTimeMillis() + fileExtension;
+            File tempFile = new File(tempDirFile, tempFileName);
+            
+            // 写入文件
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile)) {
+                fos.write(imageBytes);
+            }
+            
+            String tempFilePath = tempFile.getAbsolutePath();
+            logger.info("临时图片文件保存成功: {}", tempFilePath);
+            
+            return tempFilePath;
+            
+        } catch (Exception e) {
+            logger.error("保存临时图片文件失败: {}", fileName, e);
+            return null;
         }
     }
     

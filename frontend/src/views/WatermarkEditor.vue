@@ -23,11 +23,14 @@
       </div>
       <el-row :gutter="20">
         <el-col :span="12">
-          <!-- 图片选择与预览 -->
-          <div style="margin-bottom: 10px;">
-            <el-button type="primary" @click="selectSingleImages">选择图片</el-button>
+          <!-- 图片选择按钮 -->
+          <div style="margin-bottom: 20px;">
+            <el-button type="primary" @click="selectSingleImages">选择图片（支持多选）</el-button>
             <el-button type="success" @click="selectImageFolder" style="margin-left: 10px;">选择文件夹</el-button>
             <el-button type="warning" @click="clearAll" style="margin-left: 10px;">清除所有</el-button>
+            <div style="margin-top: 8px; font-size: 12px; color: #666;">
+              支持 JPG、PNG、BMP、TIFF 格式，可多次选择累积添加图片
+            </div>
           </div>
           <!-- 已上传图片列表 -->
           <div v-if="uploadedImages.length > 0" class="uploaded-image-list">
@@ -212,7 +215,7 @@ import { ElMessage } from 'element-plus'
 import { useWatermarkStore } from '../stores/watermark'
 import { useAppStore } from '../stores/app'
 import { useRouter } from 'vue-router'
-import { ArrowDown, Collection, DocumentAdd } from '@element-plus/icons-vue'
+import { ArrowDown, Collection, DocumentAdd, Upload } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const uploadedImages = ref([])
@@ -228,8 +231,6 @@ const recentTemplates = computed(() => {
 const selectSingleImages = async () => {
   try {
     console.log('开始选择图片文件')
-    console.log('window.javaApi:', window.javaApi)
-    console.log('selectMultipleImages方法存在:', typeof window.javaApi?.selectMultipleImages === 'function')
     
     if (!window.javaApi?.selectMultipleImages) {
       ElMessage.error('文件选择功能未就绪')
@@ -245,11 +246,18 @@ const selectSingleImages = async () => {
       console.log('解析后的文件路径数组:', imagePaths)
       
       if (Array.isArray(imagePaths) && imagePaths.length > 0) {
-        const newImages = imagePaths.map(p => ({ path: p, name: p.split(/[\\\/]/).pop() }))
+        // 保持现有图片，追加新选择的图片
+        const newImages = imagePaths.map(p => ({ 
+          path: p, 
+          name: p.split(/[\\\/]/).pop(),
+          size: 0, // 通过文件选择器选择的文件暂时无法获取大小
+          type: 'image/jpeg' // 默认类型
+        }))
+        
         uploadedImages.value = [...uploadedImages.value, ...newImages]
         console.log('更新后的uploadedImages:', uploadedImages.value)
         
-        ElMessage.success(`已添加 ${imagePaths.length} 张图片`)
+        ElMessage.success(`已添加 ${imagePaths.length} 张图片，当前共 ${uploadedImages.value.length} 张`)
         
         // 自动预览最后添加的图片
         if (newImages.length > 0) {
@@ -271,9 +279,6 @@ const selectSingleImages = async () => {
 const selectImageFolder = async () => {
   try {
     console.log('开始选择文件夹')
-    console.log('window.javaApi:', window.javaApi)
-    console.log('selectDirectory方法存在:', typeof window.javaApi?.selectDirectory === 'function')
-    console.log('listImagesInDirectory方法存在:', typeof window.javaApi?.listImagesInDirectory === 'function')
     
     if (!window.javaApi?.selectDirectory || !window.javaApi?.listImagesInDirectory) {
       ElMessage.error('文件夹选择功能未就绪')
@@ -294,11 +299,18 @@ const selectImageFolder = async () => {
         console.log('解析后的图片数组:', images)
         
         if (Array.isArray(images) && images.length > 0) {
-          const newImages = images.map(p => ({ path: p, name: p.split(/[\\\/]/).pop() }))
+          const newImages = images.map(p => ({ 
+            path: p, 
+            name: p.split(/[\\\/]/).pop(),
+            size: 0,
+            type: 'image/jpeg'
+          }))
+          
+          // 保持现有图片，追加文件夹中的图片
           uploadedImages.value = [...uploadedImages.value, ...newImages]
           console.log('更新后的uploadedImages:', uploadedImages.value)
           
-          ElMessage.success(`已从文件夹添加 ${images.length} 张图片`)
+          ElMessage.success(`已从文件夹添加 ${images.length} 张图片，当前共 ${uploadedImages.value.length} 张`)
           
           // 自动预览第一张新添加的图片
           if (newImages.length > 0) {
@@ -1232,6 +1244,13 @@ const clearAll = () => {
   console.log('用户手动清除所有状态')
 }
 
+
+// ==================== 原生拖拽上传相关方法 ====================
+
+// ==================== 图片处理相关方法 ====================
+
+// 图片上传处理已简化为使用el-upload的自定义http-request
+
 // ==================== 模板管理相关方法 ====================
 
 // 显示模板管理页面
@@ -1396,9 +1415,74 @@ const loadDefaultTemplate = async () => {
 .watermark-editor {
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  transition: all 0.3s ease;
 }
+
 .editor-card {
   margin-top: 20px;
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.upload-text {
+  margin-top: 16px;
+  font-size: 16px;
+  color: #666;
+  font-weight: 500;
+}
+
+.upload-tip {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #999;
+}
+
+/* 拖拽覆盖层 */
+.drag-upload-area .drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(64, 158, 255, 0.1);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 8px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.drag-upload-area .drag-hint {
+  text-align: center;
+  color: #409eff;
+  background: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(64, 158, 255, 0.2);
+  border: 2px solid #409eff;
+  animation: pulseScale 1s ease-in-out infinite alternate;
+}
+
+.drag-upload-area .drag-hint h3 {
+  margin: 12px 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #409eff;
+}
+
+.drag-upload-area .drag-hint p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #666;
 }
 .image-uploader {
   margin-bottom: 20px;

@@ -144,7 +144,7 @@ public class TemplateService {
                 templates.add(mapResultSetToTemplate(rs));
             }
             
-            logger.debug("获取到 {} 个模板",((TextWatermarkConfig) templates.get(0).getConfig()).getColor());
+            logger.debug("获取到 {} 个模板", templates.size());
             return templates;
             
         } catch (Exception e) {
